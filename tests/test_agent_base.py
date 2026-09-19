@@ -187,6 +187,82 @@ async def test_unrecognized_tool_use_alongside_final_tool_still_returns():
     assert len(client.messages.calls) == 1
 
 
+async def test_end_turn_with_no_tool_call_is_nudged_toward_final_tool():
+    # The model only used a server tool, then answered in plain text instead
+    # of calling the final tool -- observed live with Haiku on the flight/
+    # hotel agents (searches, then summarizes instead of submitting).
+    text_only_turn = FakeResponse(
+        content=[
+            FakeBlock(type="server_tool_use", name="web_search", input={"query": "paris flights"}),
+            FakeBlock(type="web_search_tool_result"),
+            FakeBlock(type="text", input={}),
+        ],
+        stop_reason="end_turn",
+        usage=FakeUsage(input_tokens=50, output_tokens=30),
+    )
+    final_turn = FakeResponse(
+        content=[FakeBlock(type="tool_use", name="submit", input={"ok": True})],
+        stop_reason="tool_use",
+        usage=FakeUsage(input_tokens=20, output_tokens=10),
+    )
+    client = FakeClient([text_only_turn, final_turn])
+
+    async def executor(name, input):
+        raise AssertionError("no client tools in this scenario")
+
+    result = await run_agent_loop(
+        client=client,
+        model="claude-haiku-4-5-20251001",
+        system_prompt="sys",
+        user_message="go",
+        tools=[{"type": "web_search_20250305", "name": "web_search"}, {"name": "submit"}],
+        final_tool_name="submit",
+        tool_executor=executor,
+        client_tool_names=set(),
+    )
+
+    assert result.output == {"ok": True}
+    assert len(client.messages.calls) == 2
+    nudge_message = client.messages.calls[1]["messages"][-1]
+    assert nudge_message["role"] == "user"
+    assert "submit" in nudge_message["content"]
+    assert client.messages.calls[1]["tool_choice"] == {"type": "tool", "name": "submit"}
+
+
+async def test_pause_turn_continues_without_nudge_message():
+    paused_turn = FakeResponse(
+        content=[FakeBlock(type="server_tool_use", name="web_search", input={"query": "paris hotels"})],
+        stop_reason="pause_turn",
+        usage=FakeUsage(input_tokens=40, output_tokens=5),
+    )
+    final_turn = FakeResponse(
+        content=[FakeBlock(type="tool_use", name="submit", input={"ok": True})],
+        stop_reason="tool_use",
+        usage=FakeUsage(input_tokens=20, output_tokens=10),
+    )
+    client = FakeClient([paused_turn, final_turn])
+
+    async def executor(name, input):
+        raise AssertionError("no client tools in this scenario")
+
+    result = await run_agent_loop(
+        client=client,
+        model="claude-sonnet-5",
+        system_prompt="sys",
+        user_message="go",
+        tools=[{"type": "web_search_20250305", "name": "web_search"}, {"name": "submit"}],
+        final_tool_name="submit",
+        tool_executor=executor,
+        client_tool_names=set(),
+    )
+
+    assert result.output == {"ok": True}
+    # No synthetic nudge message inserted -- the paused assistant turn is
+    # resent unchanged, per Anthropic's documented pause_turn protocol.
+    assert client.messages.calls[1]["messages"][-1]["role"] == "assistant"
+    assert "tool_choice" not in client.messages.calls[1]
+
+
 async def test_unrecognized_tool_use_alone_sends_error_tool_result_next_turn():
     unknown_turn = FakeResponse(
         content=[FakeBlock(type="tool_use", name="mystery_tool", input={"x": 1}, id="call-x")],

@@ -21,6 +21,14 @@ class AgentResult:
     usage: AgentUsage
 
 
+# stop_reasons that mean "the turn produced something usable, keep going":
+# tool_use is the normal case, end_turn can happen when the model only used
+# a server tool (e.g. web_search) and then answered in plain text instead of
+# calling the final tool, and pause_turn is Anthropic's documented mid-search
+# continuation signal. Anything else (e.g. max_tokens) is a real failure.
+_CONTINUABLE_STOP_REASONS = {"tool_use", "end_turn", "pause_turn"}
+
+
 async def run_agent_loop(
     client,
     model: str,
@@ -53,8 +61,8 @@ async def run_agent_loop(
         input_tokens += response.usage.input_tokens
         output_tokens += response.usage.output_tokens
 
-        if response.stop_reason != "tool_use":
-            raise AgentError(f"expected tool_use, got stop_reason={response.stop_reason!r}")
+        if response.stop_reason not in _CONTINUABLE_STOP_REASONS:
+            raise AgentError(f"unexpected stop_reason={response.stop_reason!r}")
 
         messages = messages + [{"role": "assistant", "content": response.content}]
 
@@ -89,9 +97,26 @@ async def run_agent_loop(
                 usage=AgentUsage(input_tokens, output_tokens, (time.monotonic() - start) * 1000),
             )
 
-        if not tool_results:
-            raise AgentError("tool_use turn produced no client tool results and no final answer")
+        if tool_results:
+            messages = messages + [{"role": "user", "content": tool_results}]
+            continue
 
-        messages = messages + [{"role": "user", "content": tool_results}]
+        if response.stop_reason == "pause_turn":
+            # Anthropic's documented mid-search continuation: resend the
+            # paused assistant message (already appended above) unchanged.
+            continue
+
+        # stop_reason was "end_turn" with no client tool call and no final
+        # tool call -- the model used only server tools (or none at all) and
+        # then answered in plain text instead of submitting its final
+        # answer. Nudge it to call the final tool explicitly rather than
+        # treating this as a hard failure.
+        messages = messages + [
+            {
+                "role": "user",
+                "content": f"Call {final_tool_name} now with your final answer based on what you found.",
+            }
+        ]
+        tool_choice = {"type": "tool", "name": final_tool_name}
 
     raise AgentError(f"max_turns={max_turns} exceeded without a final answer")
