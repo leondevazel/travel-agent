@@ -6,6 +6,7 @@ from travel_agent import orchestrator
 from travel_agent.agents.base import AgentError, AgentUsage
 from travel_agent.db import TripSessionState
 from travel_agent.schemas import FlightCandidate, HotelCandidate, ItineraryDay, Message, TripBrief
+from travel_agent.tools.weather_client import WeatherAPIError
 
 
 def _usage():
@@ -427,4 +428,93 @@ async def test_planner_failure_reply_does_not_claim_an_update(monkeypatch):
 
     assert "Updated your trip" not in result.reply
     assert "couldn't update your trip details" in result.reply
+
+
+async def test_multi_city_brief_is_reordered_before_agents_run(monkeypatch):
+    planner_brief = TripBrief(
+        destination="Osaka", origin="ICN", additional_destinations=["Tokyo"],
+        start_date="2026-11-01", end_date="2026-11-08", budget_usd=3000.0, interests=[], pace="balanced",
+    )
+    optimized_order = ["Tokyo", "Osaka"]
+
+    async def fake_planner(client, messages, previous_brief_):
+        return planner_brief, _usage()
+
+    async def fake_optimize_route(origin, cities):
+        assert origin == "ICN"
+        assert cities == ["Osaka", "Tokyo"]
+        return optimized_order
+
+    seen_briefs = []
+
+    async def fake_flight(client, brief):
+        seen_briefs.append(brief)
+        return [], _usage()
+
+    async def fake_hotel(client, brief):
+        seen_briefs.append(brief)
+        return [], _usage()
+
+    async def fake_itinerary(client, brief, flights_, hotels_, weather):
+        seen_briefs.append(brief)
+        return [], _usage()
+
+    async def fake_weather(destination, start_date, end_date):
+        return []
+
+    monkeypatch.setattr(orchestrator, "run_planner_agent", fake_planner)
+    monkeypatch.setattr(orchestrator, "optimize_route", fake_optimize_route)
+    monkeypatch.setattr(orchestrator, "run_flight_agent", fake_flight)
+    monkeypatch.setattr(orchestrator, "run_hotel_agent", fake_hotel)
+    monkeypatch.setattr(orchestrator, "run_itinerary_agent", fake_itinerary)
+    monkeypatch.setattr(orchestrator, "get_daily_summary", fake_weather)
+    monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: kw)
+
+    result = await orchestrator.handle_turn(client=object(), session=_empty_session(), user_message="Tokyo and Osaka trip")
+
+    assert result.trip_brief.destination == "Tokyo"
+    assert result.trip_brief.additional_destinations == ["Osaka"]
+    # Every downstream agent must see the reordered brief, not the planner's raw output.
+    assert all(b.destination == "Tokyo" and b.additional_destinations == ["Osaka"] for b in seen_briefs)
+    assert result.warnings == []
+
+
+async def test_route_optimization_failure_falls_back_to_planner_order_with_warning(monkeypatch):
+    planner_brief = TripBrief(
+        destination="Osaka", origin="ICN", additional_destinations=["Tokyo"],
+        start_date="2026-11-01", end_date="2026-11-08", budget_usd=3000.0, interests=[], pace="balanced",
+    )
+
+    async def fake_planner(client, messages, previous_brief_):
+        return planner_brief, _usage()
+
+    async def failing_optimize_route(origin, cities):
+        raise WeatherAPIError("geocoding down")
+
+    async def fake_flight(client, brief):
+        assert brief.destination == "Osaka"  # planner's original order, unchanged
+        return [], _usage()
+
+    async def fake_hotel(client, brief):
+        return [], _usage()
+
+    async def fake_itinerary(client, brief, flights_, hotels_, weather):
+        return [], _usage()
+
+    async def fake_weather(destination, start_date, end_date):
+        return []
+
+    monkeypatch.setattr(orchestrator, "run_planner_agent", fake_planner)
+    monkeypatch.setattr(orchestrator, "optimize_route", failing_optimize_route)
+    monkeypatch.setattr(orchestrator, "run_flight_agent", fake_flight)
+    monkeypatch.setattr(orchestrator, "run_hotel_agent", fake_hotel)
+    monkeypatch.setattr(orchestrator, "run_itinerary_agent", fake_itinerary)
+    monkeypatch.setattr(orchestrator, "get_daily_summary", fake_weather)
+    monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: kw)
+
+    result = await orchestrator.handle_turn(client=object(), session=_empty_session(), user_message="Tokyo and Osaka trip")
+
+    assert result.trip_brief.destination == "Osaka"
+    assert result.trip_brief.additional_destinations == ["Tokyo"]
+    assert any("optimized route" in w for w in result.warnings)
 

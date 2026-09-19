@@ -15,6 +15,7 @@ from travel_agent.agents.planner import run_planner_agent
 from travel_agent.db import TripSessionState
 from travel_agent.diff import diff_trip_brief
 from travel_agent.schemas import FlightCandidate, HotelCandidate, ItineraryDay, Message, TripBrief
+from travel_agent.tools.route_optimizer import optimize_route
 from travel_agent.tools.weather_client import WeatherAPIError, get_daily_summary
 
 AGENT_TIMEOUT_SECONDS = 60
@@ -79,6 +80,48 @@ async def _run_with_fallback(agent_name: str, coro, cached, session_id: str | No
         return cached, warning
 
 
+async def _optimize_route_order(
+    brief: TripBrief, session_id: str, turn_id: str
+) -> tuple[TripBrief, str | None]:
+    """Reorder a multi-city brief's destination + additional_destinations to
+    (approximately) minimize real-world travel distance, using geocoded
+    coordinates. A no-op for a single-city brief. Never fails the turn: on a
+    geocoding failure, the brief's original order is kept and a warning is
+    returned instead."""
+    if not brief.additional_destinations or not brief.origin or not brief.destination:
+        return brief, None
+
+    cities = [brief.destination, *brief.additional_destinations]
+    start = time.monotonic()
+    try:
+        optimized = await asyncio.wait_for(optimize_route(brief.origin, cities), timeout=AGENT_TIMEOUT_SECONDS)
+        metrics.record_agent_call(
+            agent_name="route_optimizer",
+            session_id=session_id,
+            turn_id=turn_id,
+            latency_ms=(time.monotonic() - start) * 1000,
+            input_tokens=0,
+            output_tokens=0,
+            success=True,
+        )
+    except (WeatherAPIError, asyncio.TimeoutError) as exc:
+        metrics.record_agent_call(
+            agent_name="route_optimizer",
+            session_id=session_id,
+            turn_id=turn_id,
+            latency_ms=(time.monotonic() - start) * 1000,
+            input_tokens=0,
+            output_tokens=0,
+            success=False,
+            error_type=type(exc).__name__,
+        )
+        return brief, "couldn't compute an optimized route order, using the order you gave"
+
+    if optimized == cities:
+        return brief, None
+    return brief.model_copy(update={"destination": optimized[0], "additional_destinations": optimized[1:]}), None
+
+
 def _retryable_agents(brief: TripBrief, session: TripSessionState) -> set[str]:
     """Agents whose cached result is empty but which the brief can now feed.
 
@@ -117,6 +160,10 @@ async def handle_turn(client, session: TripSessionState, user_message: str) -> T
             output_tokens=planner_usage.output_tokens,
             success=True,
         )
+        new_brief, route_warning = await _optimize_route_order(new_brief, session.id, turn_id)
+        if route_warning:
+            warnings.append(route_warning)
+
         agents_to_run = diff_trip_brief(session.trip_brief, new_brief)
         agents_to_run |= _retryable_agents(new_brief, session)
     except _FALLIBLE_ERRORS as exc:

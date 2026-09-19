@@ -32,15 +32,26 @@ def _condition_for(code: int) -> str:
     return _WMO_CONDITIONS.get(code, "unknown")
 
 
+async def _geocode(http: httpx.AsyncClient, place: str) -> tuple[float, float]:
+    geo_resp = await http.get(GEOCODE_URL, params={"name": place, "count": 1})
+    if geo_resp.status_code != 200:
+        raise WeatherAPIError(f"geocoding failed: {geo_resp.status_code}")
+    results = geo_resp.json().get("results") or []
+    if not results:
+        raise WeatherAPIError(f"no location found for {place!r}")
+    return results[0]["latitude"], results[0]["longitude"]
+
+
+async def geocode(place: str) -> tuple[float, float]:
+    """Look up (latitude, longitude) for a place name. Raises WeatherAPIError
+    if the place can't be found or the geocoding API fails."""
+    async with httpx.AsyncClient() as http:
+        return await _geocode(http, place)
+
+
 async def get_daily_summary(destination: str, start_date: datetime.date, end_date: datetime.date) -> list[dict]:
     async with httpx.AsyncClient() as http:
-        geo_resp = await http.get(GEOCODE_URL, params={"name": destination, "count": 1})
-        if geo_resp.status_code != 200:
-            raise WeatherAPIError(f"geocoding failed: {geo_resp.status_code}")
-        results = geo_resp.json().get("results") or []
-        if not results:
-            raise WeatherAPIError(f"no location found for {destination!r}")
-        lat, lon = results[0]["latitude"], results[0]["longitude"]
+        lat, lon = await _geocode(http, destination)
 
         forecast_resp = await http.get(
             FORECAST_URL,
