@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+from contextlib import asynccontextmanager
 
 import anthropic
 from fastapi import FastAPI, HTTPException
@@ -11,17 +12,26 @@ from travel_agent.orchestrator import TurnResult, handle_turn
 from travel_agent.schemas import FlightCandidate, HotelCandidate, ItineraryDay, TripBrief
 from travel_agent.tools.amadeus_client import AmadeusClient
 
-app = FastAPI(title="Travel Agent")
-
 _amadeus = AmadeusClient(
     client_id=settings.amadeus_client_id,
     client_secret=settings.amadeus_client_secret,
     base_url=settings.amadeus_base_url,
 )
 
+# One shared client (and connection pool) for the process, closed on shutdown.
+_anthropic_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
-def _anthropic_client() -> anthropic.AsyncAnthropic:
-    return anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Fail fast on a bad DATABASE_URL instead of on the first request, and
+    # avoid two concurrent requests racing to lazily initialize the engine.
+    await asyncio.to_thread(db.init_engine)
+    yield
+    await _anthropic_client.close()
+
+
+app = FastAPI(title="Travel Agent", lifespan=lifespan)
 
 
 class MessageRequest(BaseModel):
@@ -55,13 +65,13 @@ async def post_message_endpoint(session_id: str, body: MessageRequest):
         raise HTTPException(status_code=404, detail="session not found")
 
     result: TurnResult = await handle_turn(
-        client=_anthropic_client(), amadeus=_amadeus, session=state, user_message=body.content
+        client=_anthropic_client, amadeus=_amadeus, session=state, user_message=body.content
     )
 
     await asyncio.to_thread(
         db.save_session,
         session_id,
-        messages=state.messages + [_user_and_reply_messages(body.content, result.reply)][0],
+        messages=state.messages + _user_and_reply_messages(body.content, result.reply),
         trip_brief=result.trip_brief,
         flight_candidates=result.flight_candidates,
         hotel_candidates=result.hotel_candidates,
