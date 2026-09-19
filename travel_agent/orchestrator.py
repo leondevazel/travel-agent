@@ -19,6 +19,10 @@ from travel_agent.tools.route_optimizer import optimize_route
 from travel_agent.tools.weather_client import WeatherAPIError, get_daily_summary
 
 AGENT_TIMEOUT_SECONDS = 60
+# The itinerary agent searches per-day (what's worth seeing, opening days,
+# routing) and then composes the whole trip, so it legitimately runs several
+# times longer than flight/hotel, which finish in 7-10s.
+ITINERARY_TIMEOUT_SECONDS = 150
 
 # Everything an agent can plausibly fail with for reasons outside our control:
 # upstream APIs (Open-Meteo/Anthropic, including its web_search tool), a
@@ -46,10 +50,19 @@ class TurnResult:
     warnings: list[str]
 
 
-async def _run_with_fallback(agent_name: str, coro, cached, session_id: str | None = None, turn_id: str | None = None):
+async def _run_with_fallback(
+    agent_name: str,
+    coro,
+    cached,
+    session_id: str | None = None,
+    turn_id: str | None = None,
+    timeout: float | None = None,
+):
     start = time.monotonic()
     try:
-        result, usage = await asyncio.wait_for(coro, timeout=AGENT_TIMEOUT_SECONDS)
+        # Resolved per call, not as a default arg, so the module constant
+        # stays patchable (tests shorten it to force the timeout path).
+        result, usage = await asyncio.wait_for(coro, timeout=timeout or AGENT_TIMEOUT_SECONDS)
         metrics.record_agent_call(
             agent_name=agent_name,
             session_id=session_id,
@@ -224,6 +237,7 @@ async def handle_turn(client, session: TripSessionState, user_message: str) -> T
             session.itinerary,
             session_id=session.id,
             turn_id=turn_id,
+            timeout=ITINERARY_TIMEOUT_SECONDS,
         )
         if itin_warning:
             warnings.append(itin_warning)
