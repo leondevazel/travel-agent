@@ -6,15 +6,20 @@ from travel_agent.config import settings
 
 METRICS_PATH = Path(settings.metrics_log_path)
 
-# USD per million tokens, claude-sonnet-5 pricing (docs.claude.com/pricing).
-# Applied uniformly to every agent call regardless of which model actually
-# served it (Flight/Hotel run on Haiku 4.5, roughly half this rate), so
-# logged cost is a conservative (over-)estimate for those two agents, not
-# an exact figure. Also excludes the $10/1,000-searches web_search tool fee,
-# which agents using web_search (flight/hotel/itinerary) incur separately
-# and this module does not currently track.
-INPUT_COST_PER_MTOK = 2.0
-OUTPUT_COST_PER_MTOK = 10.0
+# USD per million tokens (docs.claude.com/pricing), per model, since the
+# agents deliberately don't all run on the same one. Still excludes the
+# $10/1,000-searches web_search tool fee, which the search-using agents
+# (flight/hotel/itinerary) incur separately and this module doesn't track.
+MODEL_PRICING = {
+    "claude-sonnet-5": (2.0, 10.0),
+    "claude-haiku-4-5-20251001": (1.0, 5.0),
+}
+INPUT_COST_PER_MTOK, OUTPUT_COST_PER_MTOK = MODEL_PRICING["claude-sonnet-5"]
+
+
+def _pricing(model: str | None) -> tuple[float, float]:
+    """Unknown or missing model prices as Sonnet, i.e. never under-reports."""
+    return MODEL_PRICING.get(model or "", (INPUT_COST_PER_MTOK, OUTPUT_COST_PER_MTOK))
 
 
 def record_agent_call(
@@ -26,6 +31,7 @@ def record_agent_call(
     session_id: str | None = None,
     turn_id: str | None = None,
     error_type: str | None = None,
+    model: str | None = None,
 ) -> dict:
     """Append one JSONL metrics record.
 
@@ -33,11 +39,13 @@ def record_agent_call(
     conversational turn, so cost per completed trip plan and turn-level
     wall-clock latency can be derived from the log.
     """
-    cost_usd = (input_tokens / 1_000_000) * INPUT_COST_PER_MTOK + (output_tokens / 1_000_000) * OUTPUT_COST_PER_MTOK
+    input_price, output_price = _pricing(model)
+    cost_usd = (input_tokens / 1_000_000) * input_price + (output_tokens / 1_000_000) * output_price
     record = {
         "agent": agent_name,
         "session_id": session_id,
         "turn_id": turn_id,
+        "model": model,
         "latency_ms": latency_ms,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,

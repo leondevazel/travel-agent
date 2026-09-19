@@ -66,3 +66,25 @@ def test_session_and_turn_ids_are_recorded_when_given(tmp_path, monkeypatch):
     logged = json.loads(log_path.read_text().strip())
     assert logged["session_id"] == "sess-1"
     assert logged["turn_id"] == "turn-1"
+
+
+def test_cost_is_priced_per_model(tmp_path, monkeypatch):
+    monkeypatch.setattr(metrics, "METRICS_PATH", tmp_path / "m.jsonl")
+
+    sonnet = metrics.record_agent_call(
+        agent_name="itinerary", latency_ms=1.0, input_tokens=1_000_000,
+        output_tokens=0, success=True, model="claude-sonnet-5",
+    )
+    haiku = metrics.record_agent_call(
+        agent_name="flight", latency_ms=1.0, input_tokens=1_000_000,
+        output_tokens=0, success=True, model="claude-haiku-4-5-20251001",
+    )
+    unknown = metrics.record_agent_call(
+        agent_name="flight", latency_ms=1.0, input_tokens=1_000_000,
+        output_tokens=0, success=True, model="something-new",
+    )
+
+    assert sonnet["cost_usd"] == 2.0
+    assert haiku["cost_usd"] == 1.0
+    # An unrecognised model must not silently under-report.
+    assert unknown["cost_usd"] == 2.0
