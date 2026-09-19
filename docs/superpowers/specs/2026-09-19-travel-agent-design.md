@@ -19,9 +19,18 @@ go "wow"). Landed on a travel planning agent after narrowing:
 - task: a multi-agent system that autonomously researches and produces
   a high-completeness trip itinerary (NOT an agent that executes real
   bookings/payments — out of scope, and safer)
-- data: must use real flight/hotel price APIs (e.g. Amadeus free tier),
-  not just LLM knowledge — same "real data, not fabricated" principle
-  as the previous project
+- data: must use real, live-sourced flight/hotel prices, not just LLM
+  knowledge — same "real data, not fabricated" principle as the
+  previous project. Originally planned around the Amadeus free
+  self-service API; that tier was decommissioned (July 2025 — the
+  portal is now Enterprise-only, sales-gated, not viable for a
+  portfolio project). Revised 2026-09-19: Flight and Hotel agents use
+  Claude's hosted `web_search` tool (same mechanism the Itinerary
+  agent already uses for attractions) instead of a dedicated flight/
+  hotel API — grounds prices in real, cited web search results rather
+  than a structured price feed. Less precise than a purpose-built
+  API, but avoids an unusable/enterprise-gated dependency and keeps
+  the "real data" principle intact. `amadeus_client.py` removed.
 - interaction: chat-based, multi-turn refinement (e.g. "2일차 느슨하게
   바꿔줘" should only re-run what's actually affected)
 - architecture: explicitly chose multi-agent (planner + specialist
@@ -40,10 +49,11 @@ Planner Agent (Claude) -- extracts/updates structured trip brief from
     |                      the conversation (destination, dates, budget,
     |                      interests, pace)
     | (re-runs only the specialist agents affected by what changed)
-    |-- Flight Agent (Claude + Amadeus flight search tool)
-    |-- Hotel Agent (Claude + Amadeus hotel search tool)
-    `-- Itinerary Agent (Claude + weather/attractions tools) -- composes
-                          the day-by-day plan from flight/hotel results
+    |-- Flight Agent (Claude + hosted web_search tool)
+    |-- Hotel Agent (Claude + hosted web_search tool)
+    `-- Itinerary Agent (Claude + weather tool + hosted web_search) --
+                          composes the day-by-day plan from flight/hotel
+                          results
     |
 Response + updated itinerary (persisted per session)
 ```
@@ -64,10 +74,10 @@ didn't need to re-run").
   itinerary (JSON)
 - **agents/**: `planner.py`, `flight_agent.py`, `hotel_agent.py`,
   `itinerary_agent.py` — each a separate Claude call with a focused
-  system prompt and its own tool(s)
-- **tools/**: `amadeus_client.py` (real flight + hotel search),
-  `weather_client.py`; attraction/things-to-do info via Claude's
-  built-in web search tool rather than a bespoke scraper
+  system prompt and its own tool(s). Flight/Hotel/Itinerary all use
+  Claude's hosted `web_search` tool (capped via `max_uses`) rather
+  than a bespoke scraper or a dedicated flight/hotel API.
+- **tools/**: `weather_client.py` (Open-Meteo, real forecast data)
 
 ## 4. Data Flow
 
@@ -84,9 +94,11 @@ didn't need to re-run").
 
 ## 5. Error Handling
 
-- Amadeus API failure or rate limit -> fall back to a cached/prior
-  result or a clear "couldn't fetch live prices right now" message —
-  never silently fabricate a price.
+- Flight/Hotel search failure (Anthropic API error, no usable search
+  results, or a submitted candidate that doesn't match a real search
+  result) -> fall back to a cached/prior result or a clear "couldn't
+  fetch live prices right now" message — never silently fabricate a
+  price.
 - If one specialist agent times out during a parallel run, return a
   partial itinerary from the agents that did complete rather than
   failing the whole turn.
@@ -100,30 +112,77 @@ search cut planning time from X to Y seconds" — with a real measured
 number, not an estimate, consistent with the "never estimate, always
 measure" rule carried over from the prior project.
 
-## 7. Explicitly Out of Scope (for now)
+## 7. Landing Page / Interactive Frontend (deferred until backend works)
 
-- Real booking/payment execution (safety + complexity; the itinerary
-  is the deliverable, not a completed purchase).
-- The landing page's 3D/animation treatment — user wants a genuinely
-  cute, travel-themed (planes, landscapes, characters) 3D-feeling
-  landing page. Discussed but deliberately deferred until the backend
-  is working:
-  - Bespoke custom 3D character modeling is out of reach (no 3D
-    modeling/rigging tool or text-to-3D generator available) — noted
-    explicitly to the user, not glossed over.
-  - Realistic path discussed: Three.js (hand-coded low-poly 3D scenes)
-    + free CC0 3D assets (e.g. Kenney.nl, Sketchfab CC0) + possibly
-    Lottie animations for 2.5D illustrated moments. No final decision
-    made yet — revisit once backend works.
+User wants a genuinely "wow", professional-grade interactive landing
+page — not just static visual polish. Concrete moments called out:
+
+- **Traveler count picker**: selecting party size adds/removes
+  character illustrations one at a time with a bounce/fade animation
+  (not an instant swap).
+- **Country picker**: selecting a destination shows that country's
+  representative landmark/scenery (e.g. Eiffel Tower for France, Fuji
+  + torii for Japan) in a small 3D scene.
+- **Trip-generation transition**: while the agents are working, show
+  a "~로 떠나는 중..." moment — the user's character boards a plane/boat
+  and travels, to amplify anticipation rather than a plain loading
+  spinner.
+
+Claude's own artifact/frontend-design tooling can build and integrate
+the interaction logic and code, but cannot originate polished
+character illustration or 3D asset design/rigging itself (no
+image/3D-generation tool available). Decision: **outsource asset and
+animation creation to specialized no-code tools, integrate their
+exported output in code.**
+
+- **Rive** (rive.app) — character animations driven by state machines;
+  fits the traveler-count add/remove animation and the plane/boat
+  trip-transition moment. Exports a `.riv` file, embedded via the
+  `@rive-app/react-canvas` web runtime.
+- **Spline** (spline.design) — no-code 3D scene editor with
+  text-to-3D/material generation and an easy React embed
+  (`@splinetool/react-spline`); fits the per-country landmark/scenery
+  scene on selection.
+- **LottieFiles** (lottiefiles.com) — fallback for short, lightweight
+  looping transition animations if Rive proves heavier than needed for
+  a given moment.
+
+Draft prompts already written for Rive (traveler character set +
+count state machine) and Spline (per-country low-poly landmark scene)
+— see the session that produced this spec update; reuse and refine
+them when this phase starts. Division of labor: assets/animations are
+authored in Rive/Spline by the user (or a designer), Claude integrates
+the exported files into the React/Next.js frontend and wires them to
+app state (party size, selected country, generation-in-progress).
+
+- Real booking/payment execution stays out of scope entirely (safety +
+  complexity; the itinerary is the deliverable, not a completed
+  purchase).
 
 ## 8. Next Steps
 
-1. User review of this spec (this file).
-2. Invoke the writing-plans skill to produce an implementation plan
-   (TDD-based, per superpowers workflow) for the backend
-   (Planner/Flight/Hotel/Itinerary agents + orchestrator + TripSession
-   persistence) — landing page/animation work comes after the backend
-   works end-to-end.
+1. ~~User review of this spec (this file).~~ Done — spec approved,
+   frontend direction (§7) added after user follow-up.
+2. Backend implementation plan written via the writing-plans skill:
+   `docs/superpowers/plans/2026-09-19-travel-agent-backend-plan.md`
+   (TDD-based, 11 tasks: scaffolding+schemas+diff, TripSession
+   persistence, Amadeus client, weather client, shared agent tool-use
+   loop, Planner/Flight/Hotel/Itinerary agents, metrics, orchestrator,
+   FastAPI app). Executed via subagent-driven-development: all 11
+   tasks done, individually reviewed, plus a final whole-branch review
+   (9 Important findings fixed in one wave). 60/60 tests passing.
+   Opened as PR #1 (`worktree-travel-agent-backend` -> `master`) on
+   `github.com/leondevazel/travel-agent`.
+3. Pre-smoke-test discovery: Amadeus's free self-service API was
+   decommissioned (§1 note) before a real-API smoke test could run.
+   Replaced the Amadeus client in Flight/Hotel agents with Claude's
+   hosted `web_search` tool (same pattern Itinerary already used) —
+   see §1 and §3. `amadeus_client.py` and its tests removed;
+   `flight_agent.py`/`hotel_agent.py` rewritten around `web_search`.
+4. Real-API smoke test (real `ANTHROPIC_API_KEY`, no Amadeus needed
+   anymore) — next up.
+5. Landing page/animation work (§7) starts once the backend plan is
+   fully green end-to-end against real APIs.
 
 ## Resuming this project in a new session
 
