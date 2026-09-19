@@ -1,6 +1,10 @@
 import asyncio
 import time
+import uuid
 from dataclasses import dataclass
+
+import anthropic
+from pydantic import ValidationError
 
 from travel_agent import metrics
 from travel_agent.agents.base import AgentError
@@ -15,7 +19,22 @@ from travel_agent.tools.amadeus_client import AmadeusAPIError
 from travel_agent.tools.weather_client import WeatherAPIError, get_daily_summary
 
 AGENT_TIMEOUT_SECONDS = 30
-_FALLIBLE_ERRORS = (AmadeusAPIError, WeatherAPIError, AgentError, asyncio.TimeoutError)
+
+# Everything an agent can plausibly fail with for reasons outside our control:
+# upstream APIs (Amadeus/Open-Meteo/Anthropic), a timeout, or an LLM returning
+# data that doesn't fit the schema (ValidationError) or omits an expected key
+# (KeyError). Deliberately NOT bare Exception, so genuine bugs in our own code
+# (e.g. a TypeError) still surface loudly instead of looking like a graceful
+# degradation.
+_FALLIBLE_ERRORS = (
+    AmadeusAPIError,
+    WeatherAPIError,
+    AgentError,
+    asyncio.TimeoutError,
+    anthropic.APIError,
+    ValidationError,
+    KeyError,
+)
 
 
 @dataclass
@@ -28,22 +47,31 @@ class TurnResult:
     warnings: list[str]
 
 
-async def _run_with_fallback(agent_name: str, coro, cached):
+async def _run_with_fallback(agent_name: str, coro, cached, session_id: str | None = None, turn_id: str | None = None):
     start = time.monotonic()
     try:
         result, usage = await asyncio.wait_for(coro, timeout=AGENT_TIMEOUT_SECONDS)
         metrics.record_agent_call(
             agent_name=agent_name,
+            session_id=session_id,
+            turn_id=turn_id,
             latency_ms=usage.latency_ms,
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
             success=True,
         )
         return result, None
-    except _FALLIBLE_ERRORS:
+    except _FALLIBLE_ERRORS as exc:
         latency_ms = (time.monotonic() - start) * 1000
         metrics.record_agent_call(
-            agent_name=agent_name, latency_ms=latency_ms, input_tokens=0, output_tokens=0, success=False
+            agent_name=agent_name,
+            session_id=session_id,
+            turn_id=turn_id,
+            latency_ms=latency_ms,
+            input_tokens=0,
+            output_tokens=0,
+            success=False,
+            error_type=type(exc).__name__,
         )
         warning = (
             f"couldn't fetch live {agent_name} data right now, showing previous results"
@@ -53,9 +81,29 @@ async def _run_with_fallback(agent_name: str, coro, cached):
         return cached, warning
 
 
+def _retryable_agents(brief: TripBrief, session: TripSessionState) -> set[str]:
+    """Agents whose cached result is empty but which the brief can now feed.
+
+    Without this, an agent that failed on an earlier turn would never retry:
+    the brief stops changing, so diff_trip_brief returns nothing to run and the
+    empty result persists forever.
+    """
+    if not (brief.origin and brief.destination and brief.start_date and brief.end_date):
+        return set()
+    agents: set[str] = set()
+    if not session.flight_candidates:
+        agents.add("flight")
+    if not session.hotel_candidates:
+        agents.add("hotel")
+    return agents
+
+
 async def handle_turn(client, amadeus, session: TripSessionState, user_message: str) -> TurnResult:
+    turn_start = time.monotonic()
+    turn_id = str(uuid.uuid4())
     messages = session.messages + [Message(role="user", content=user_message)]
     warnings: list[str] = []
+    planner_failed = False
 
     planner_start = time.monotonic()
     try:
@@ -64,21 +112,32 @@ async def handle_turn(client, amadeus, session: TripSessionState, user_message: 
         )
         metrics.record_agent_call(
             agent_name="planner",
+            session_id=session.id,
+            turn_id=turn_id,
             latency_ms=planner_usage.latency_ms,
             input_tokens=planner_usage.input_tokens,
             output_tokens=planner_usage.output_tokens,
             success=True,
         )
         agents_to_run = diff_trip_brief(session.trip_brief, new_brief)
-    except _FALLIBLE_ERRORS:
+        agents_to_run |= _retryable_agents(new_brief, session)
+    except _FALLIBLE_ERRORS as exc:
         latency_ms = (time.monotonic() - planner_start) * 1000
         metrics.record_agent_call(
-            agent_name="planner", latency_ms=latency_ms, input_tokens=0, output_tokens=0, success=False
+            agent_name="planner",
+            session_id=session.id,
+            turn_id=turn_id,
+            latency_ms=latency_ms,
+            input_tokens=0,
+            output_tokens=0,
+            success=False,
+            error_type=type(exc).__name__,
         )
         # No new brief data to act on, so skip specialist agents entirely rather than
         # feeding them an empty/unchanged brief that would likely just fail again.
         new_brief = session.trip_brief if session.trip_brief is not None else TripBrief()
         agents_to_run = set()
+        planner_failed = True
         warnings.append("couldn't update your trip details right now")
 
     flight_candidates = session.flight_candidates
@@ -87,8 +146,20 @@ async def handle_turn(client, amadeus, session: TripSessionState, user_message: 
 
     if "flight" in agents_to_run or "hotel" in agents_to_run:
         (flight_candidates, flight_warning), (hotel_candidates, hotel_warning) = await asyncio.gather(
-            _run_with_fallback("flight", run_flight_agent(client, new_brief, amadeus), session.flight_candidates),
-            _run_with_fallback("hotel", run_hotel_agent(client, new_brief, amadeus), session.hotel_candidates),
+            _run_with_fallback(
+                "flight",
+                run_flight_agent(client, new_brief, amadeus),
+                session.flight_candidates,
+                session_id=session.id,
+                turn_id=turn_id,
+            ),
+            _run_with_fallback(
+                "hotel",
+                run_hotel_agent(client, new_brief, amadeus),
+                session.hotel_candidates,
+                session_id=session.id,
+                turn_id=turn_id,
+            ),
         )
         for w in (flight_warning, hotel_warning):
             if w:
@@ -106,11 +177,24 @@ async def handle_turn(client, amadeus, session: TripSessionState, user_message: 
             "itinerary",
             run_itinerary_agent(client, new_brief, flight_candidates, hotel_candidates, weather),
             session.itinerary,
+            session_id=session.id,
+            turn_id=turn_id,
         )
         if itin_warning:
             warnings.append(itin_warning)
 
-    reply = _build_reply(new_brief, itinerary, warnings)
+    reply = _build_reply(new_brief, itinerary, warnings, planner_failed=planner_failed)
+
+    metrics.record_agent_call(
+        agent_name="turn",
+        session_id=session.id,
+        turn_id=turn_id,
+        latency_ms=(time.monotonic() - turn_start) * 1000,
+        input_tokens=0,
+        output_tokens=0,
+        success=True,
+    )
+
     return TurnResult(
         reply=reply,
         trip_brief=new_brief,
@@ -121,8 +205,14 @@ async def handle_turn(client, amadeus, session: TripSessionState, user_message: 
     )
 
 
-def _build_reply(brief: TripBrief, itinerary: list[ItineraryDay], warnings: list[str]) -> str:
-    lines = [f"Updated your trip to {brief.destination or 'your destination'}."]
+def _build_reply(
+    brief: TripBrief, itinerary: list[ItineraryDay], warnings: list[str], planner_failed: bool = False
+) -> str:
+    # When the planner itself failed, nothing was updated, so don't claim it was.
+    if planner_failed:
+        lines = ["I couldn't update your trip details just now, so here's what I had before."]
+    else:
+        lines = [f"Updated your trip to {brief.destination or 'your destination'}."]
     for day in itinerary:
         lines.append(f"Day {day.day_number} ({day.date}): {', '.join(day.activities)}")
     for warning in warnings:

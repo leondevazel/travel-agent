@@ -32,3 +32,37 @@ def test_record_agent_call_appends_multiple_records(tmp_path, monkeypatch):
     lines = log_path.read_text().strip().splitlines()
     assert len(lines) == 2
     assert json.loads(lines[1])["success"] is False
+
+
+def test_session_and_turn_ids_default_to_none(tmp_path, monkeypatch):
+    log_path = tmp_path / "metrics.jsonl"
+    monkeypatch.setattr(metrics, "METRICS_PATH", log_path)
+
+    record = metrics.record_agent_call(
+        agent_name="planner", latency_ms=1.0, input_tokens=1, output_tokens=1, success=True
+    )
+
+    assert record["session_id"] is None
+    assert record["turn_id"] is None
+    assert json.loads(log_path.read_text().strip())["turn_id"] is None
+
+
+def test_session_and_turn_ids_are_recorded_when_given(tmp_path, monkeypatch):
+    log_path = tmp_path / "metrics.jsonl"
+    monkeypatch.setattr(metrics, "METRICS_PATH", log_path)
+
+    record = metrics.record_agent_call(
+        agent_name="turn",
+        latency_ms=1234.0,
+        input_tokens=0,
+        output_tokens=0,
+        success=True,
+        session_id="sess-1",
+        turn_id="turn-1",
+    )
+
+    assert record["session_id"] == "sess-1"
+    assert record["turn_id"] == "turn-1"
+    logged = json.loads(log_path.read_text().strip())
+    assert logged["session_id"] == "sess-1"
+    assert logged["turn_id"] == "turn-1"
