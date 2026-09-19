@@ -120,3 +120,40 @@ async def test_planner_passes_previous_brief_in_prompt():
     assert "느슨하게" in sent_user_message
     assert '"pace":"balanced"' in sent_user_message.replace(" ", "") or "balanced" in sent_user_message
     assert brief.pace == "relaxed"
+
+
+async def test_planner_extracts_multi_city_route_and_must_visit():
+    response = FakeResponse(
+        content=[
+            FakeBlock(
+                type="tool_use",
+                name="submit_trip_brief",
+                input={
+                    "destination": "Tokyo",
+                    "origin": "ICN",
+                    "additional_destinations": ["Osaka"],
+                    "must_visit": ["Fushimi Inari Shrine"],
+                    "start_date": "2026-11-01",
+                    "end_date": "2026-11-08",
+                    "budget_usd": 3000.0,
+                    "interests": ["food"],
+                    "pace": "balanced",
+                },
+            )
+        ],
+        stop_reason="tool_use",
+        usage=FakeUsage(input_tokens=220, output_tokens=45),
+    )
+    client = FakeClient(response)
+    messages = [
+        Message(
+            role="user",
+            content="Plan a trip to Tokyo then Osaka from Seoul, I really want to see Fushimi Inari Shrine",
+        )
+    ]
+
+    brief, _ = await run_planner_agent(client, messages, previous_brief=None)
+
+    assert brief.destination == "Tokyo"
+    assert brief.additional_destinations == ["Osaka"]
+    assert brief.must_visit == ["Fushimi Inari Shrine"]

@@ -105,3 +105,15 @@ def test_diff_budget_change_reruns_everything():
     old = _brief(budget_usd=2000.0)
     new = _brief(budget_usd=1200.0)
     assert diff_trip_brief(old, new) == {"flight", "hotel", "itinerary"}
+
+
+def test_diff_additional_destinations_change_reruns_everything():
+    old = _brief(additional_destinations=[])
+    new = _brief(additional_destinations=["Tokyo"])
+    assert diff_trip_brief(old, new) == {"flight", "hotel", "itinerary"}
+
+
+def test_diff_must_visit_change_reruns_itinerary_only():
+    old = _brief(must_visit=[])
+    new = _brief(must_visit=["Eiffel Tower"])
+    assert diff_trip_brief(old, new) == {"itinerary"}

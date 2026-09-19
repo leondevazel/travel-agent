@@ -14,6 +14,14 @@ class Message(BaseModel):
 class TripBrief(BaseModel):
     destination: str | None = None
     origin: str | None = None
+    # Extra cities/countries after `destination`, in the order the user
+    # wants to visit them (e.g. destination="Tokyo",
+    # additional_destinations=["Osaka"] for a Tokyo-then-Osaka trip).
+    additional_destinations: list[str] = Field(default_factory=list)
+    # Specific places the user wants guaranteed a spot in the itinerary
+    # (e.g. "Eiffel Tower"), as opposed to `interests`, which are general
+    # themes (e.g. "art") the Itinerary agent uses to pick activities.
+    must_visit: list[str] = Field(default_factory=list)
     start_date: datetime.date | None = None
     end_date: datetime.date | None = None
     budget_usd: float | None = None

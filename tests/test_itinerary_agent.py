@@ -103,3 +103,22 @@ async def test_itinerary_agent_includes_web_search_tool():
 
     tool_types = {t.get("type") for t in client.messages.calls[0]["tools"]}
     assert "web_search_20250305" in tool_types
+
+
+async def test_itinerary_agent_prompt_states_route_order_and_must_visit():
+    response = FakeResponse(
+        content=[FakeBlock(type="tool_use", name="submit_itinerary", input={"days": []})],
+        stop_reason="tool_use",
+        usage=FakeUsage(input_tokens=10, output_tokens=5),
+    )
+    client = FakeClient([response])
+    brief = _brief(additional_destinations=["Rome"], must_visit=["Eiffel Tower"])
+
+    await run_itinerary_agent(client, brief, flights=[], hotels=[], weather=[])
+
+    sent_message = client.messages.calls[0]["messages"][0]["content"]
+    assert "Paris -> Rome" in sent_message
+    assert "Eiffel Tower" in sent_message
+    # Multi-city trips get a wider search/turn/token budget than a single city.
+    web_search_tool = next(t for t in client.messages.calls[0]["tools"] if t.get("type") == "web_search_20250305")
+    assert web_search_tool["max_uses"] > 3

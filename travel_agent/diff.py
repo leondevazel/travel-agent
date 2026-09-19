@@ -1,7 +1,7 @@
 from travel_agent.schemas import TripBrief
 
-CORE_FIELDS = ("destination", "origin", "start_date", "end_date", "budget_usd")
-ITINERARY_FIELDS = ("interests", "pace")
+CORE_FIELDS = ("destination", "origin", "additional_destinations", "start_date", "end_date", "budget_usd")
+ITINERARY_FIELDS = ("interests", "pace", "must_visit")
 
 
 def diff_trip_brief(old: TripBrief | None, new: TripBrief) -> set[str]:

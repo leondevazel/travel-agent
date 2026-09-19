@@ -9,6 +9,16 @@ Rules:
 - Keep every field from the previous brief unless the conversation clearly
   changes it. Never null out a field the user hasn't mentioned again.
 - interests is a cumulative list of the user's stated interests/activities.
+- must_visit is specific named places the user wants guaranteed in the
+  itinerary (e.g. "Eiffel Tower", "Fushimi Inari Shrine") — distinct from
+  interests, which are general themes (e.g. "art") not specific places.
+- additional_destinations: if the user wants to visit more than one
+  city/country on this trip, `destination` is the first stop and
+  additional_destinations lists the rest IN THE ORDER the user wants to
+  visit them (e.g. "Tokyo then Osaka" -> destination="Tokyo",
+  additional_destinations=["Osaka"]). Leave it empty for a single-city
+  trip. If the user never states an order, keep whatever order they first
+  mentioned the cities in.
 - pace is one of "relaxed", "balanced", "packed" — infer it from phrasing
   like "느슨하게"/relaxed, "빡빡하게"/packed, etc.
 - Dates must be ISO format (YYYY-MM-DD). origin/destination are city or
@@ -23,6 +33,16 @@ SUBMIT_TRIP_BRIEF_TOOL = {
         "properties": {
             "destination": {"type": ["string", "null"]},
             "origin": {"type": ["string", "null"]},
+            "additional_destinations": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Extra cities/countries after destination, in visit order",
+            },
+            "must_visit": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Specific named places to guarantee in the itinerary",
+            },
             "start_date": {"type": ["string", "null"], "description": "ISO date"},
             "end_date": {"type": ["string", "null"], "description": "ISO date"},
             "budget_usd": {"type": ["number", "null"]},
