@@ -7,7 +7,13 @@ Given a trip brief, call search_flights with the correct IATA airport codes
 for the origin and destination cities and the trip's start/end dates, then
 call submit_flight_candidates with up to 3 options ranked by best value
 (balance of price and directness) within the stated budget when possible.
+Only submit candidates that appeared verbatim in a search_flights tool
+result: never recall, estimate, or invent a carrier, route, or price from
+your own knowledge.
 """
+
+# Fields used to match a submitted candidate against a real search result.
+_MATCH_FIELDS = ("carrier", "price_usd", "origin", "destination")
 
 SEARCH_FLIGHTS_TOOL = {
     "name": "search_flights",
@@ -49,7 +55,13 @@ SUBMIT_FLIGHT_CANDIDATES_TOOL = {
 }
 
 
+def _match_key(offer: dict) -> tuple:
+    return tuple(offer.get(field) for field in _MATCH_FIELDS)
+
+
 async def run_flight_agent(client, brief: TripBrief, amadeus: AmadeusClient) -> tuple[list[FlightCandidate], AgentUsage]:
+    real_offers: list[dict] = []
+
     async def executor(name: str, tool_input: dict) -> dict:
         offers = await amadeus.search_flights(
             origin=tool_input["origin"],
@@ -57,6 +69,7 @@ async def run_flight_agent(client, brief: TripBrief, amadeus: AmadeusClient) -> 
             departure_date=tool_input["departure_date"],
             return_date=tool_input.get("return_date"),
         )
+        real_offers.extend(offers)
         return {"offers": offers}
 
     user_message = (
@@ -77,5 +90,7 @@ async def run_flight_agent(client, brief: TripBrief, amadeus: AmadeusClient) -> 
         max_turns=3,
     )
 
-    candidates = [FlightCandidate(**c) for c in result.output["candidates"]]
+    # Drop any candidate the model invented rather than took from a real offer.
+    real_keys = {_match_key(o) for o in real_offers}
+    candidates = [FlightCandidate(**c) for c in result.output["candidates"] if _match_key(c) in real_keys]
     return candidates, result.usage

@@ -79,7 +79,9 @@ def save_session(
 ) -> None:
     with _session() as db:
         row = db.get(TripSession, session_id)
-        row.messages = [m.model_dump(mode="json") for m in messages]
+        if row is None:
+            raise KeyError(f"no TripSession with id {session_id!r}")
+        row.messages =[m.model_dump(mode="json") for m in messages]
         row.trip_brief = trip_brief.model_dump(mode="json")
         row.flight_candidates = [c.model_dump(mode="json") for c in flight_candidates]
         row.hotel_candidates = [c.model_dump(mode="json") for c in hotel_candidates]

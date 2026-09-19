@@ -7,7 +7,13 @@ Given a trip brief, call search_hotels with the 3-letter IATA city code for
 the destination and the trip's check-in/check-out dates, then call
 submit_hotel_candidates with up to 3 options ranked by best value within
 the stated budget when possible.
+Only submit candidates that appeared verbatim in a search_hotels tool
+result: never recall, estimate, or invent a hotel or a price from your own
+knowledge.
 """
+
+# Fields used to match a submitted candidate against a real search result.
+_MATCH_FIELDS = ("name", "price_usd_per_night")
 
 SEARCH_HOTELS_TOOL = {
     "name": "search_hotels",
@@ -45,13 +51,20 @@ SUBMIT_HOTEL_CANDIDATES_TOOL = {
 }
 
 
+def _match_key(offer: dict) -> tuple:
+    return tuple(offer.get(field) for field in _MATCH_FIELDS)
+
+
 async def run_hotel_agent(client, brief: TripBrief, amadeus: AmadeusClient) -> tuple[list[HotelCandidate], AgentUsage]:
+    real_offers: list[dict] = []
+
     async def executor(name: str, tool_input: dict) -> dict:
         offers = await amadeus.search_hotels(
             city_code=tool_input["city_code"],
             check_in=tool_input["check_in"],
             check_out=tool_input["check_out"],
         )
+        real_offers.extend(offers)
         return {"offers": offers}
 
     user_message = (
@@ -72,5 +85,7 @@ async def run_hotel_agent(client, brief: TripBrief, amadeus: AmadeusClient) -> t
         max_turns=3,
     )
 
-    candidates = [HotelCandidate(**c) for c in result.output["candidates"]]
+    # Drop any candidate the model invented rather than took from a real offer.
+    real_keys = {_match_key(o) for o in real_offers}
+    candidates = [HotelCandidate(**c) for c in result.output["candidates"] if _match_key(c) in real_keys]
     return candidates, result.usage

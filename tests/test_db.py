@@ -1,5 +1,7 @@
 import datetime
 
+import pytest
+
 from travel_agent.db import create_session, load_session, save_session
 from travel_agent.schemas import FlightCandidate, HotelCandidate, ItineraryDay, Message, TripBrief
 
@@ -40,3 +42,15 @@ def test_save_and_reload_full_session(db_ready):
     assert state.flight_candidates == flights
     assert state.hotel_candidates == hotels
     assert state.itinerary == itinerary
+
+
+def test_save_missing_session_raises_keyerror(db_ready):
+    with pytest.raises(KeyError):
+        save_session(
+            "never-created",
+            messages=[],
+            trip_brief=TripBrief(),
+            flight_candidates=[],
+            hotel_candidates=[],
+            itinerary=[],
+        )

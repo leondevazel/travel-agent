@@ -156,3 +156,65 @@ async def test_max_turns_exceeded_raises_agent_error():
             client_tool_names={"search"},
             max_turns=2,
         )
+
+
+async def test_unrecognized_tool_use_alongside_final_tool_still_returns():
+    response = FakeResponse(
+        content=[
+            FakeBlock(type="tool_use", name="mystery_tool", input={"x": 1}, id="call-x"),
+            FakeBlock(type="tool_use", name="submit", input={"ok": True}, id="call-final"),
+        ],
+        stop_reason="tool_use",
+        usage=FakeUsage(input_tokens=10, output_tokens=5),
+    )
+    client = FakeClient([response])
+
+    async def executor(name, input):
+        raise AssertionError("unrecognized tools must not be routed to the local executor")
+
+    result = await run_agent_loop(
+        client=client,
+        model="claude-sonnet-5",
+        system_prompt="sys",
+        user_message="go",
+        tools=[{"name": "submit"}],
+        final_tool_name="submit",
+        tool_executor=executor,
+        client_tool_names=set(),
+    )
+
+    assert result.output == {"ok": True}
+    assert len(client.messages.calls) == 1
+
+
+async def test_unrecognized_tool_use_alone_sends_error_tool_result_next_turn():
+    unknown_turn = FakeResponse(
+        content=[FakeBlock(type="tool_use", name="mystery_tool", input={"x": 1}, id="call-x")],
+        stop_reason="tool_use",
+        usage=FakeUsage(input_tokens=10, output_tokens=5),
+    )
+    final_turn = FakeResponse(
+        content=[FakeBlock(type="tool_use", name="submit", input={"ok": True}, id="call-final")],
+        stop_reason="tool_use",
+        usage=FakeUsage(input_tokens=8, output_tokens=4),
+    )
+    client = FakeClient([unknown_turn, final_turn])
+
+    async def executor(name, input):
+        raise AssertionError("unrecognized tools must not be routed to the local executor")
+
+    result = await run_agent_loop(
+        client=client,
+        model="claude-sonnet-5",
+        system_prompt="sys",
+        user_message="go",
+        tools=[{"name": "submit"}],
+        final_tool_name="submit",
+        tool_executor=executor,
+        client_tool_names=set(),
+    )
+
+    assert result.output == {"ok": True}
+    sent = client.messages.calls[1]["messages"][-1]["content"][0]
+    assert sent["tool_use_id"] == "call-x"
+    assert sent["is_error"] is True

@@ -68,6 +68,18 @@ async def run_agent_loop(
                 tool_results.append(
                     {"type": "tool_result", "tool_use_id": block.id, "content": json.dumps(result)}
                 )
+            elif block.type == "tool_use":
+                # Unknown client tool: still answer it, otherwise the next
+                # request would carry a tool_use with no matching tool_result
+                # and the API would reject the whole conversation.
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": f"error: unrecognized tool {block.name!r}",
+                        "is_error": True,
+                    }
+                )
             # server_tool_use / web_search_tool_result / other server-executed
             # blocks are already resolved by Anthropic and need no local action.
 
