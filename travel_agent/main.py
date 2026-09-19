@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from travel_agent import db
 from travel_agent.config import settings
+from travel_agent.mock import mock_turn
 from travel_agent.orchestrator import TurnResult, handle_turn
 from travel_agent.schemas import FlightCandidate, HotelCandidate, ItineraryDay, TripBrief
 
@@ -64,7 +65,10 @@ async def post_message_endpoint(session_id: str, body: MessageRequest):
     if state is None:
         raise HTTPException(status_code=404, detail="session not found")
 
-    result: TurnResult = await handle_turn(client=_anthropic_client, session=state, user_message=body.content)
+    if settings.mock_mode:
+        result: TurnResult = mock_turn(body.content)
+    else:
+        result = await handle_turn(client=_anthropic_client, session=state, user_message=body.content)
 
     await asyncio.to_thread(
         db.save_session,

@@ -13,6 +13,9 @@ class AgentUsage:
     input_tokens: int
     output_tokens: int
     latency_ms: float
+    # Which model actually served the call, so cost is priced per model
+    # rather than assuming every agent runs on the same one.
+    model: str = ""
 
 
 @dataclass
@@ -95,7 +98,7 @@ async def run_agent_loop(
         if final_output is not None:
             return AgentResult(
                 output=final_output,
-                usage=AgentUsage(input_tokens, output_tokens, (time.monotonic() - start) * 1000),
+                usage=AgentUsage(input_tokens, output_tokens, (time.monotonic() - start) * 1000, model),
             )
 
         if tool_results:

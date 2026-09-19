@@ -71,6 +71,7 @@ async def _run_with_fallback(
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
             success=True,
+            model=usage.model,
         )
         return result, None
     except _FALLIBLE_ERRORS as exc:
@@ -172,6 +173,7 @@ async def handle_turn(client, session: TripSessionState, user_message: str) -> T
             input_tokens=planner_usage.input_tokens,
             output_tokens=planner_usage.output_tokens,
             success=True,
+            model=planner_usage.model,
         )
         new_brief, route_warning = await _optimize_route_order(new_brief, session.id, turn_id)
         if route_warning:
