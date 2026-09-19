@@ -13,7 +13,7 @@ type Step = "intro" | "form" | "generating" | "results";
 export default function Home() {
   const [step, setStep] = useState<Step>("intro");
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [pendingDestination, setPendingDestination] = useState("");
+  const [pendingDestinations, setPendingDestinations] = useState<string[]>([]);
   const [result, setResult] = useState<TurnResponse | null>(null);
   const [isRefining, setIsRefining] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,15 +55,15 @@ export default function Home() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-lg">
           {error && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{error}</p>}
           <TripForm
-            onSubmit={(message) => {
-              setPendingDestination(message);
+            onSubmit={(message, values) => {
+              setPendingDestinations(values.destinations);
               void handleFormSubmit(message);
             }}
           />
         </motion.div>
       )}
 
-      {step === "generating" && <GeneratingTransition destination={extractDestination(pendingDestination)} />}
+      {step === "generating" && <GeneratingTransition destinations={pendingDestinations} />}
 
       {step === "results" && result && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full">
@@ -82,9 +82,4 @@ export default function Home() {
       )}
     </main>
   );
-}
-
-function extractDestination(message: string): string {
-  const match = message.match(/to ([^,]+)/);
-  return match ? match[1].trim() : "";
 }

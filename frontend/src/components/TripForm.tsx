@@ -37,7 +37,11 @@ export function tripFormToMessage(v: TripFormValues): string {
   return parts.join(", ") + ".";
 }
 
-export function TripForm({ onSubmit }: { onSubmit: (message: string) => void }) {
+export function TripForm({
+  onSubmit,
+}: {
+  onSubmit: (message: string, values: TripFormValues) => void;
+}) {
   const [travelers, setTravelers] = useState(1);
   const [origin, setOrigin] = useState("");
   const [destinations, setDestinations] = useState<string[]>([]);
@@ -53,19 +57,18 @@ export function TripForm({ onSubmit }: { onSubmit: (message: string) => void }) 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!canSubmit) return;
-    onSubmit(
-      tripFormToMessage({
-        travelers,
-        origin,
-        destinations,
-        mustVisit,
-        startDate,
-        endDate,
-        budgetUsd,
-        interests,
-        pace,
-      })
-    );
+    const values: TripFormValues = {
+      travelers,
+      origin,
+      destinations,
+      mustVisit,
+      startDate,
+      endDate,
+      budgetUsd,
+      interests,
+      pace,
+    };
+    onSubmit(tripFormToMessage(values), values);
   }
 
   return (
