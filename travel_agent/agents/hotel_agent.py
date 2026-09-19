@@ -12,11 +12,13 @@ price: never recall, estimate, or invent a hotel or a price from your own
 knowledge. If web search doesn't turn up a clear, current price for a city,
 return fewer candidates for that city rather than a fabricated one.
 
-Also set booking_url on each candidate: the page a traveler can actually
-book that hotel on (its own site, or the Booking.com / Google Hotels page
-you took the rate from). It must be a real URL you saw in a search result,
-not invented. Never return an empty list just because a rate lacked a
-link -- submit the hotel without booking_url instead.
+Every candidate needs a booking_url. A hotel the traveler cannot click
+through to book is half a result, so treat the link as part of the job,
+not an optional extra: use the search result URL you took the rate from,
+the hotel's own site, or its Booking.com / Agoda / Google Hotels page. It
+must be a real URL that appeared in a search result, never invented or
+guessed from a pattern. Only leave booking_url out if the search genuinely
+surfaced no URL at all for that hotel.
 """
 
 _CANDIDATE_SCHEMA = {
