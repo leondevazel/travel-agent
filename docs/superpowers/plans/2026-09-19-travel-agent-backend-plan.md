@@ -2561,9 +2561,12 @@ async def handle_turn(client, amadeus, session: TripSessionState, user_message: 
                 warnings.append(w)
 
     if agents_to_run:
-        try:
-            weather = await get_daily_summary(new_brief.destination, new_brief.start_date, new_brief.end_date)
-        except WeatherAPIError:
+        if new_brief.destination and new_brief.start_date and new_brief.end_date:
+            try:
+                weather = await get_daily_summary(new_brief.destination, new_brief.start_date, new_brief.end_date)
+            except WeatherAPIError:
+                weather = []
+        else:
             weather = []
         itinerary, itin_warning = await _run_with_fallback(
             "itinerary",
