@@ -10,8 +10,20 @@ leg, ranked by best value (balance of price and directness) within the
 stated budget when possible.
 Only submit candidates backed by an actual web_search result for a current
 price: never recall, estimate, or invent a carrier, route, or price from
-your own knowledge. If web search doesn't turn up a clear, current price for
-a leg, return fewer candidates for that leg rather than a fabricated one.
+your own knowledge.
+
+Submit what you actually found. carrier, price_usd, origin and destination
+are required; departure_time, arrival_time and stops are optional -- search
+results often give a carrier and a fare without exact schedule details. In
+that case submit the candidate WITHOUT those fields rather than inventing
+times or omitting a real fare you found. Never return an empty candidate
+list just because schedule details were missing: a real carrier and a real
+price is a useful result on its own.
+
+Also set booking_url on each candidate: the page a traveler can actually
+book or price-check that route on (the specific search result you took the
+fare from, or that airline's or an aggregator's search URL for the route
+and dates). It must be a real URL you saw in a search result, not invented.
 """
 
 _CANDIDATE_SCHEMA = {
@@ -19,13 +31,17 @@ _CANDIDATE_SCHEMA = {
     "properties": {
         "carrier": {"type": "string"},
         "price_usd": {"type": "number"},
-        "departure_time": {"type": "string"},
-        "arrival_time": {"type": "string"},
         "origin": {"type": "string"},
         "destination": {"type": "string"},
-        "stops": {"type": "integer"},
+        "departure_time": {"type": ["string", "null"], "description": "Only if the search result gave it"},
+        "arrival_time": {"type": ["string", "null"], "description": "Only if the search result gave it"},
+        "stops": {"type": ["integer", "null"], "description": "Only if the search result gave it"},
+        "booking_url": {
+            "type": ["string", "null"],
+            "description": "Real URL from a search result where this fare can be booked or checked",
+        },
     },
-    "required": ["carrier", "price_usd", "departure_time", "arrival_time", "origin", "destination", "stops"],
+    "required": ["carrier", "price_usd", "origin", "destination"],
 }
 
 SUBMIT_FLIGHT_CANDIDATES_TOOL = {

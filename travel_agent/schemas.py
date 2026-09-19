@@ -32,11 +32,15 @@ class TripBrief(BaseModel):
 class FlightCandidate(BaseModel):
     carrier: str
     price_usd: float
-    departure_time: str
-    arrival_time: str
     origin: str
     destination: str
-    stops: int
+    # Optional on purpose: web search reliably yields carrier + price, but
+    # rarely exact times or stop counts. Requiring them made the agent
+    # refuse to submit anything at all rather than invent them.
+    departure_time: str | None = None
+    arrival_time: str | None = None
+    stops: int | None = None
+    booking_url: str | None = None
 
 
 class HotelCandidate(BaseModel):
@@ -44,14 +48,17 @@ class HotelCandidate(BaseModel):
     price_usd_per_night: float
     rating: float | None = None
     address: str
+    booking_url: str | None = None
 
 
 class ItineraryDay(BaseModel):
     day_number: int
     date: datetime.date
-    # The single place that best represents this day (e.g. "Gyeongbokgung
-    # Palace"), specific enough to look up a real photo for -- not a vague
-    # area like "downtown" or the city name alone.
-    location: str
+    # Every notable place visited this day, in visit order (e.g.
+    # ["Gyeongbokgung Palace", "Bukchon Hanok Village", "Insadong"]). Each
+    # must be specific enough to look up a real photo for -- not a vague
+    # area like "downtown" or the city name alone. The frontend shows one
+    # image per entry, so a day with three stops shows three photos.
+    locations: list[str]
     activities: list[str]
     notes: str = ""

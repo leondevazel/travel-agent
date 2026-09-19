@@ -20,11 +20,31 @@ appears in some day's activities — these are non-negotiable, unlike
 interests, which are just a general steer on what kind of activities to
 pick.
 
-For each day, also pick one `location`: the single place that best
-represents that day (e.g. "Gyeongbokgung Palace", not "downtown Seoul" or
-just "Seoul"). It's used to look up a real photo for that day, so it must
-be a specific, real, named place, not a generic area or the whole day
-paraphrased.
+Quality bar for what you pick. This is the whole product, so do not
+settle for the obvious:
+- Use web_search to find what is genuinely worth seeing right now --
+  current exhibitions, seasonal events, recently opened places, what
+  locals rate highly -- not just the three most famous landmarks.
+- Prefer specific, named, real places ("Tsukiji Outer Market",
+  "Musee de l'Orangerie") over generic filler ("explore downtown",
+  "enjoy local cuisine", "free time for shopping"). Every activity
+  should name something concrete a traveler could walk into.
+- Check opening days. Many museums close one weekday. Do not schedule a
+  place on a day it is shut; say so in notes when it drove the ordering.
+- Match the stated interests. A food-interested traveler gets specific
+  markets, restaurants and dishes by name, not "try local food".
+
+Route each day geographically, not randomly. Group places that are near
+each other into the same day, and order them within the day so the
+traveler moves in one sensible direction instead of criss-crossing the
+city. Mention the neighborhood in notes so the routing logic is visible.
+
+For each day, fill `locations`: every notable place visited that day, in
+visit order (e.g. ["Gyeongbokgung Palace", "Bukchon Hanok Village",
+"Insadong"]). Each entry must be a specific, real, named place -- these
+are used to look up real photos, one per entry, so a vague entry like
+"downtown Seoul" or "Seoul" produces a useless image. Typically 2-4
+entries per day, matching the day's actual stops.
 
 When finished, call submit_itinerary with one entry per day of the trip.
 """
@@ -42,14 +62,18 @@ SUBMIT_ITINERARY_TOOL = {
                     "properties": {
                         "day_number": {"type": "integer"},
                         "date": {"type": "string"},
-                        "location": {
-                            "type": "string",
-                            "description": "The single specific, named place that best represents this day",
+                        "locations": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "Every notable place visited this day, in visit order. Specific "
+                                "named places only (photo lookup depends on it). Usually 2-4."
+                            ),
                         },
                         "activities": {"type": "array", "items": {"type": "string"}},
                         "notes": {"type": "string"},
                     },
-                    "required": ["day_number", "date", "location", "activities", "notes"],
+                    "required": ["day_number", "date", "locations", "activities", "notes"],
                 },
             },
         },
