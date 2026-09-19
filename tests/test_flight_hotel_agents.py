@@ -41,22 +41,6 @@ class FakeClient:
         self.messages = FakeMessagesAPI(responses)
 
 
-class FakeAmadeus:
-    def __init__(self, flight_results=None, hotel_results=None):
-        self.flight_results = flight_results or []
-        self.hotel_results = hotel_results or []
-        self.flight_calls = []
-        self.hotel_calls = []
-
-    async def search_flights(self, origin, destination, departure_date, return_date=None, adults=1):
-        self.flight_calls.append((origin, destination, departure_date, return_date))
-        return self.flight_results
-
-    async def search_hotels(self, city_code, check_in, check_out):
-        self.hotel_calls.append((city_code, check_in, check_out))
-        return self.hotel_results
-
-
 def _brief():
     return TripBrief(
         destination="Paris",
@@ -69,21 +53,11 @@ def _brief():
     )
 
 
-async def test_run_flight_agent_searches_then_submits():
-    search_call = FakeResponse(
+async def test_run_flight_agent_searches_web_then_submits():
+    response = FakeResponse(
         content=[
-            FakeBlock(
-                type="tool_use",
-                name="search_flights",
-                input={"origin": "ICN", "destination": "CDG", "departure_date": "2026-11-01", "return_date": "2026-11-05"},
-                id="call-1",
-            )
-        ],
-        stop_reason="tool_use",
-        usage=FakeUsage(input_tokens=100, output_tokens=20),
-    )
-    submit_call = FakeResponse(
-        content=[
+            FakeBlock(type="server_tool_use", name="web_search", input={"query": "ICN to CDG flight price Nov 1 2026"}),
+            FakeBlock(type="web_search_tool_result"),
             FakeBlock(
                 type="tool_use",
                 name="submit_flight_candidates",
@@ -100,50 +74,28 @@ async def test_run_flight_agent_searches_then_submits():
                         }
                     ]
                 },
-            )
+            ),
         ],
         stop_reason="tool_use",
-        usage=FakeUsage(input_tokens=60, output_tokens=15),
+        usage=FakeUsage(input_tokens=200, output_tokens=40),
     )
-    client = FakeClient([search_call, submit_call])
-    amadeus = FakeAmadeus(
-        flight_results=[
-            {
-                "carrier": "KE",
-                "price_usd": 812.5,
-                "departure_time": "t1",
-                "arrival_time": "t2",
-                "origin": "ICN",
-                "destination": "CDG",
-                "stops": 0,
-            }
-        ]
-    )
+    client = FakeClient([response])
 
-    candidates, usage = await run_flight_agent(client, _brief(), amadeus)
+    candidates, usage = await run_flight_agent(client, _brief())
 
     assert candidates == [
         FlightCandidate(carrier="KE", price_usd=812.5, departure_time="t1", arrival_time="t2", origin="ICN", destination="CDG", stops=0)
     ]
-    assert amadeus.flight_calls == [("ICN", "CDG", "2026-11-01", "2026-11-05")]
-    assert usage.input_tokens == 160
+    assert usage.input_tokens == 200
+    tool_types = {t.get("type") for t in client.messages.calls[0]["tools"]}
+    assert "web_search_20250305" in tool_types
 
 
-async def test_run_hotel_agent_searches_then_submits():
-    search_call = FakeResponse(
+async def test_run_hotel_agent_searches_web_then_submits():
+    response = FakeResponse(
         content=[
-            FakeBlock(
-                type="tool_use",
-                name="search_hotels",
-                input={"city_code": "PAR", "check_in": "2026-11-01", "check_out": "2026-11-05"},
-                id="call-1",
-            )
-        ],
-        stop_reason="tool_use",
-        usage=FakeUsage(input_tokens=90, output_tokens=18),
-    )
-    submit_call = FakeResponse(
-        content=[
+            FakeBlock(type="server_tool_use", name="web_search", input={"query": "Paris hotel Nov 1-5 2026 price"}),
+            FakeBlock(type="web_search_tool_result"),
             FakeBlock(
                 type="tool_use",
                 name="submit_hotel_candidates",
@@ -152,94 +104,16 @@ async def test_run_hotel_agent_searches_then_submits():
                         {"name": "Hotel Lumiere", "price_usd_per_night": 180.0, "rating": 4.3, "address": "Paris"}
                     ]
                 },
-            )
+            ),
         ],
         stop_reason="tool_use",
-        usage=FakeUsage(input_tokens=55, output_tokens=12),
+        usage=FakeUsage(input_tokens=190, output_tokens=38),
     )
-    client = FakeClient([search_call, submit_call])
-    amadeus = FakeAmadeus(
-        hotel_results=[{"name": "Hotel Lumiere", "price_usd_per_night": 180.0, "rating": 4.3, "address": "Paris"}]
-    )
+    client = FakeClient([response])
 
-    candidates, usage = await run_hotel_agent(client, _brief(), amadeus)
+    candidates, usage = await run_hotel_agent(client, _brief())
 
     assert candidates == [HotelCandidate(name="Hotel Lumiere", price_usd_per_night=180.0, rating=4.3, address="Paris")]
-    assert amadeus.hotel_calls == [("PAR", "2026-11-01", "2026-11-05")]
-    assert usage.input_tokens == 145
-
-
-async def test_flight_agent_drops_candidates_not_backed_by_a_real_offer():
-    real_offer = {
-        "carrier": "KE",
-        "price_usd": 812.5,
-        "departure_time": "t1",
-        "arrival_time": "t2",
-        "origin": "ICN",
-        "destination": "CDG",
-        "stops": 0,
-    }
-    invented = {
-        "carrier": "AF",
-        "price_usd": 399.0,
-        "departure_time": "t3",
-        "arrival_time": "t4",
-        "origin": "ICN",
-        "destination": "CDG",
-        "stops": 0,
-    }
-    search_call = FakeResponse(
-        content=[
-            FakeBlock(
-                type="tool_use",
-                name="search_flights",
-                input={"origin": "ICN", "destination": "CDG", "departure_date": "2026-11-01", "return_date": "2026-11-05"},
-                id="call-1",
-            )
-        ],
-        stop_reason="tool_use",
-        usage=FakeUsage(input_tokens=100, output_tokens=20),
-    )
-    submit_call = FakeResponse(
-        content=[
-            FakeBlock(type="tool_use", name="submit_flight_candidates", input={"candidates": [real_offer, invented]})
-        ],
-        stop_reason="tool_use",
-        usage=FakeUsage(input_tokens=60, output_tokens=15),
-    )
-    client = FakeClient([search_call, submit_call])
-    amadeus = FakeAmadeus(flight_results=[real_offer])
-
-    candidates, _ = await run_flight_agent(client, _brief(), amadeus)
-
-    assert [c.carrier for c in candidates] == ["KE"]
-
-
-async def test_hotel_agent_drops_candidates_not_backed_by_a_real_offer():
-    real_offer = {"name": "Hotel Lumiere", "price_usd_per_night": 180.0, "rating": 4.3, "address": "Paris"}
-    invented = {"name": "Hotel Fantome", "price_usd_per_night": 75.0, "rating": 4.9, "address": "Paris"}
-    search_call = FakeResponse(
-        content=[
-            FakeBlock(
-                type="tool_use",
-                name="search_hotels",
-                input={"city_code": "PAR", "check_in": "2026-11-01", "check_out": "2026-11-05"},
-                id="call-1",
-            )
-        ],
-        stop_reason="tool_use",
-        usage=FakeUsage(input_tokens=90, output_tokens=18),
-    )
-    submit_call = FakeResponse(
-        content=[
-            FakeBlock(type="tool_use", name="submit_hotel_candidates", input={"candidates": [invented, real_offer]})
-        ],
-        stop_reason="tool_use",
-        usage=FakeUsage(input_tokens=55, output_tokens=12),
-    )
-    client = FakeClient([search_call, submit_call])
-    amadeus = FakeAmadeus(hotel_results=[real_offer])
-
-    candidates, _ = await run_hotel_agent(client, _brief(), amadeus)
-
-    assert [c.name for c in candidates] == ["Hotel Lumiere"]
+    assert usage.input_tokens == 190
+    tool_types = {t.get("type") for t in client.messages.calls[0]["tools"]}
+    assert "web_search_20250305" in tool_types

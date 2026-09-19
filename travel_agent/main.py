@@ -10,13 +10,6 @@ from travel_agent import db
 from travel_agent.config import settings
 from travel_agent.orchestrator import TurnResult, handle_turn
 from travel_agent.schemas import FlightCandidate, HotelCandidate, ItineraryDay, TripBrief
-from travel_agent.tools.amadeus_client import AmadeusClient
-
-_amadeus = AmadeusClient(
-    client_id=settings.amadeus_client_id,
-    client_secret=settings.amadeus_client_secret,
-    base_url=settings.amadeus_base_url,
-)
 
 # One shared client (and connection pool) for the process, closed on shutdown.
 _anthropic_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -64,9 +57,7 @@ async def post_message_endpoint(session_id: str, body: MessageRequest):
     if state is None:
         raise HTTPException(status_code=404, detail="session not found")
 
-    result: TurnResult = await handle_turn(
-        client=_anthropic_client, amadeus=_amadeus, session=state, user_message=body.content
-    )
+    result: TurnResult = await handle_turn(client=_anthropic_client, session=state, user_message=body.content)
 
     await asyncio.to_thread(
         db.save_session,

@@ -15,19 +15,17 @@ from travel_agent.agents.planner import run_planner_agent
 from travel_agent.db import TripSessionState
 from travel_agent.diff import diff_trip_brief
 from travel_agent.schemas import FlightCandidate, HotelCandidate, ItineraryDay, Message, TripBrief
-from travel_agent.tools.amadeus_client import AmadeusAPIError
 from travel_agent.tools.weather_client import WeatherAPIError, get_daily_summary
 
 AGENT_TIMEOUT_SECONDS = 30
 
 # Everything an agent can plausibly fail with for reasons outside our control:
-# upstream APIs (Amadeus/Open-Meteo/Anthropic), a timeout, or an LLM returning
-# data that doesn't fit the schema (ValidationError) or omits an expected key
-# (KeyError). Deliberately NOT bare Exception, so genuine bugs in our own code
-# (e.g. a TypeError) still surface loudly instead of looking like a graceful
-# degradation.
+# upstream APIs (Open-Meteo/Anthropic, including its web_search tool), a
+# timeout, or an LLM returning data that doesn't fit the schema
+# (ValidationError) or omits an expected key (KeyError). Deliberately NOT
+# bare Exception, so genuine bugs in our own code (e.g. a TypeError) still
+# surface loudly instead of looking like a graceful degradation.
 _FALLIBLE_ERRORS = (
-    AmadeusAPIError,
     WeatherAPIError,
     AgentError,
     asyncio.TimeoutError,
@@ -98,7 +96,7 @@ def _retryable_agents(brief: TripBrief, session: TripSessionState) -> set[str]:
     return agents
 
 
-async def handle_turn(client, amadeus, session: TripSessionState, user_message: str) -> TurnResult:
+async def handle_turn(client, session: TripSessionState, user_message: str) -> TurnResult:
     turn_start = time.monotonic()
     turn_id = str(uuid.uuid4())
     messages = session.messages + [Message(role="user", content=user_message)]
@@ -148,14 +146,14 @@ async def handle_turn(client, amadeus, session: TripSessionState, user_message: 
         (flight_candidates, flight_warning), (hotel_candidates, hotel_warning) = await asyncio.gather(
             _run_with_fallback(
                 "flight",
-                run_flight_agent(client, new_brief, amadeus),
+                run_flight_agent(client, new_brief),
                 session.flight_candidates,
                 session_id=session.id,
                 turn_id=turn_id,
             ),
             _run_with_fallback(
                 "hotel",
-                run_hotel_agent(client, new_brief, amadeus),
+                run_hotel_agent(client, new_brief),
                 session.hotel_candidates,
                 session_id=session.id,
                 turn_id=turn_id,

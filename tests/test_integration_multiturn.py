@@ -51,11 +51,11 @@ def fake_agents(monkeypatch):
     async def fake_planner(client, messages, previous_brief):
         return next(briefs), _usage()
 
-    async def fake_flight(client, brief, amadeus):
+    async def fake_flight(client, brief):
         calls["flight"] += 1
         return FLIGHTS, _usage()
 
-    async def fake_hotel(client, brief, amadeus):
+    async def fake_hotel(client, brief):
         calls["hotel"] += 1
         return HOTELS, _usage()
 

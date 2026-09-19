@@ -6,9 +6,12 @@ from travel_agent.config import settings
 
 METRICS_PATH = Path(settings.metrics_log_path)
 
-# USD per million tokens, claude-sonnet-5 pricing.
-INPUT_COST_PER_MTOK = 3.0
-OUTPUT_COST_PER_MTOK = 15.0
+# USD per million tokens, claude-sonnet-5 pricing (docs.claude.com/pricing).
+# Does not include the $10/1,000-searches web_search tool fee, which agents
+# using web_search (flight/hotel/itinerary) incur separately and this module
+# does not currently track.
+INPUT_COST_PER_MTOK = 2.0
+OUTPUT_COST_PER_MTOK = 10.0
 
 
 def record_agent_call(

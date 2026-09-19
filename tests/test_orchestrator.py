@@ -6,7 +6,6 @@ from travel_agent import orchestrator
 from travel_agent.agents.base import AgentError, AgentUsage
 from travel_agent.db import TripSessionState
 from travel_agent.schemas import FlightCandidate, HotelCandidate, ItineraryDay, Message, TripBrief
-from travel_agent.tools.amadeus_client import AmadeusAPIError
 
 
 def _usage():
@@ -28,10 +27,10 @@ async def test_first_turn_runs_all_agents(monkeypatch):
     async def fake_planner(client, messages, previous_brief):
         return new_brief, _usage()
 
-    async def fake_flight(client, brief, amadeus):
+    async def fake_flight(client, brief):
         return flights, _usage()
 
-    async def fake_hotel(client, brief, amadeus):
+    async def fake_hotel(client, brief):
         return hotels, _usage()
 
     async def fake_itinerary(client, brief, flights_, hotels_, weather):
@@ -48,7 +47,7 @@ async def test_first_turn_runs_all_agents(monkeypatch):
     monkeypatch.setattr(orchestrator, "get_daily_summary", fake_weather)
     monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: kw)
 
-    result = await orchestrator.handle_turn(client=object(), amadeus=object(), session=_empty_session(), user_message="Plan a trip to Paris")
+    result = await orchestrator.handle_turn(client=object(), session=_empty_session(), user_message="Plan a trip to Paris")
 
     assert result.trip_brief == new_brief
     assert result.flight_candidates == flights
@@ -90,7 +89,7 @@ async def test_pace_only_change_skips_flight_and_hotel(monkeypatch):
     monkeypatch.setattr(orchestrator, "get_daily_summary", fake_weather)
     monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: kw)
 
-    result = await orchestrator.handle_turn(client=object(), amadeus=object(), session=session, user_message="2일차 느슨하게 바꿔줘")
+    result = await orchestrator.handle_turn(client=object(), session=session, user_message="2일차 느슨하게 바꿔줘")
 
     assert result.flight_candidates == cached_flights
     assert result.hotel_candidates == cached_hotels
@@ -111,10 +110,10 @@ async def test_flight_agent_failure_falls_back_to_cached_and_warns(monkeypatch):
     async def fake_planner(client, messages, previous_brief_):
         return new_brief, _usage()
 
-    async def failing_flight(client, brief, amadeus):
-        raise AmadeusAPIError("rate limited")
+    async def failing_flight(client, brief):
+        raise AgentError("web search rate limited")
 
-    async def fake_hotel(client, brief, amadeus):
+    async def fake_hotel(client, brief):
         return new_hotels, _usage()
 
     async def fake_itinerary(client, brief, flights_, hotels_, weather):
@@ -130,7 +129,7 @@ async def test_flight_agent_failure_falls_back_to_cached_and_warns(monkeypatch):
     monkeypatch.setattr(orchestrator, "get_daily_summary", fake_weather)
     monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: kw)
 
-    result = await orchestrator.handle_turn(client=object(), amadeus=object(), session=session, user_message="lower budget to 1500")
+    result = await orchestrator.handle_turn(client=object(), session=session, user_message="lower budget to 1500")
 
     assert result.flight_candidates == cached_flights
     assert result.hotel_candidates == new_hotels
@@ -144,11 +143,11 @@ async def test_agent_timeout_falls_back_without_failing_whole_turn(monkeypatch):
     async def fake_planner(client, messages, previous_brief_):
         return new_brief, _usage()
 
-    async def slow_flight(client, brief, amadeus):
+    async def slow_flight(client, brief):
         await asyncio.sleep(10)
         return [], _usage()
 
-    async def fake_hotel(client, brief, amadeus):
+    async def fake_hotel(client, brief):
         return [], _usage()
 
     async def fake_itinerary(client, brief, flights_, hotels_, weather):
@@ -165,7 +164,7 @@ async def test_agent_timeout_falls_back_without_failing_whole_turn(monkeypatch):
     monkeypatch.setattr(orchestrator, "AGENT_TIMEOUT_SECONDS", 0.05)
     monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: kw)
 
-    result = await orchestrator.handle_turn(client=object(), amadeus=object(), session=_empty_session(), user_message="Plan a trip to Tokyo")
+    result = await orchestrator.handle_turn(client=object(), session=_empty_session(), user_message="Plan a trip to Tokyo")
 
     assert result.flight_candidates == []
     assert any("flight" in w for w in result.warnings)
@@ -195,7 +194,7 @@ async def test_planner_failure_falls_back_to_previous_brief_and_warns(monkeypatc
     recorded = []
     monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: recorded.append(kw))
 
-    result = await orchestrator.handle_turn(client=object(), amadeus=object(), session=session, user_message="add more museums")
+    result = await orchestrator.handle_turn(client=object(), session=session, user_message="add more museums")
 
     assert result.trip_brief == previous_brief
     assert result.flight_candidates == cached_flights
@@ -220,7 +219,7 @@ async def test_planner_failure_on_new_session_falls_back_to_empty_brief(monkeypa
     monkeypatch.setattr(orchestrator, "run_itinerary_agent", fail_if_called)
     monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: kw)
 
-    result = await orchestrator.handle_turn(client=object(), amadeus=object(), session=_empty_session(), user_message="Plan a trip to Tokyo")
+    result = await orchestrator.handle_turn(client=object(), session=_empty_session(), user_message="Plan a trip to Tokyo")
 
     assert result.trip_brief == TripBrief()
     assert result.flight_candidates == []
@@ -250,7 +249,7 @@ async def test_unrelated_message_does_not_rerun_specialists(monkeypatch):
     monkeypatch.setattr(orchestrator, "run_itinerary_agent", fail_if_called)
     monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: kw)
 
-    result = await orchestrator.handle_turn(client=object(), amadeus=object(), session=session, user_message="thanks!")
+    result = await orchestrator.handle_turn(client=object(), session=session, user_message="thanks!")
 
     assert result.itinerary == session.itinerary
 
@@ -269,12 +268,12 @@ async def test_validation_error_from_agent_triggers_fallback_and_warning(monkeyp
     async def fake_planner(client, messages, previous_brief_):
         return new_brief, _usage()
 
-    async def malformed_flight(client, brief, amadeus):
+    async def malformed_flight(client, brief):
         # What FlightCandidate(**c) raises when the LLM submits junk.
         FlightCandidate(carrier="KE")
         raise AssertionError("unreachable")
 
-    async def fake_hotel(client, brief, amadeus):
+    async def fake_hotel(client, brief):
         return cached_hotels, _usage()
 
     async def fake_itinerary(client, brief, flights_, hotels_, weather):
@@ -291,7 +290,7 @@ async def test_validation_error_from_agent_triggers_fallback_and_warning(monkeyp
     recorded = []
     monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: recorded.append(kw))
 
-    result = await orchestrator.handle_turn(client=object(), amadeus=object(), session=session, user_message="lower budget")
+    result = await orchestrator.handle_turn(client=object(), session=session, user_message="lower budget")
 
     assert result.flight_candidates == cached_flights
     assert any("flight" in w for w in result.warnings)
@@ -306,10 +305,10 @@ async def test_key_error_from_agent_triggers_fallback_and_warning(monkeypatch):
     async def fake_planner(client, messages, previous_brief_):
         return new_brief, _usage()
 
-    async def missing_key_flight(client, brief, amadeus):
+    async def missing_key_flight(client, brief):
         return {"nope": 1}["candidates"], _usage()
 
-    async def fake_hotel(client, brief, amadeus):
+    async def fake_hotel(client, brief):
         return [], _usage()
 
     async def fake_itinerary(client, brief, flights_, hotels_, weather):
@@ -325,7 +324,7 @@ async def test_key_error_from_agent_triggers_fallback_and_warning(monkeypatch):
     monkeypatch.setattr(orchestrator, "get_daily_summary", fake_weather)
     monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: kw)
 
-    result = await orchestrator.handle_turn(client=object(), amadeus=object(), session=_empty_session(), user_message="Plan Tokyo")
+    result = await orchestrator.handle_turn(client=object(), session=_empty_session(), user_message="Plan Tokyo")
 
     assert result.flight_candidates == []
     assert any("flight" in w for w in result.warnings)
@@ -347,11 +346,11 @@ async def test_previously_failed_flight_agent_retries_on_unchanged_brief(monkeyp
     async def fake_planner(client, messages, previous_brief_):
         return previous_brief, _usage()  # brief unchanged this turn
 
-    async def fake_flight(client, brief, amadeus):
+    async def fake_flight(client, brief):
         called.append("flight")
         return recovered_flights, _usage()
 
-    async def fake_hotel(client, brief, amadeus):
+    async def fake_hotel(client, brief):
         called.append("hotel")
         return cached_hotels, _usage()
 
@@ -368,7 +367,7 @@ async def test_previously_failed_flight_agent_retries_on_unchanged_brief(monkeyp
     monkeypatch.setattr(orchestrator, "get_daily_summary", fake_weather)
     monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: kw)
 
-    result = await orchestrator.handle_turn(client=object(), amadeus=object(), session=session, user_message="any cheaper flights?")
+    result = await orchestrator.handle_turn(client=object(), session=session, user_message="any cheaper flights?")
 
     assert "flight" in called, "a previously-failed flight agent must retry even when the brief is unchanged"
     assert result.flight_candidates == recovered_flights
@@ -380,10 +379,10 @@ async def test_turn_level_metric_is_recorded_with_session_and_turn_ids(monkeypat
     async def fake_planner(client, messages, previous_brief_):
         return new_brief, _usage()
 
-    async def fake_flight(client, brief, amadeus):
+    async def fake_flight(client, brief):
         return [], _usage()
 
-    async def fake_hotel(client, brief, amadeus):
+    async def fake_hotel(client, brief):
         return [], _usage()
 
     async def fake_itinerary(client, brief, flights_, hotels_, weather):
@@ -400,7 +399,7 @@ async def test_turn_level_metric_is_recorded_with_session_and_turn_ids(monkeypat
     recorded = []
     monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: recorded.append(kw))
 
-    await orchestrator.handle_turn(client=object(), amadeus=object(), session=_empty_session(), user_message="Plan Paris")
+    await orchestrator.handle_turn(client=object(), session=_empty_session(), user_message="Plan Paris")
 
     turn_records = [kw for kw in recorded if kw["agent_name"] == "turn"]
     assert len(turn_records) == 1
@@ -424,7 +423,7 @@ async def test_planner_failure_reply_does_not_claim_an_update(monkeypatch):
     monkeypatch.setattr(orchestrator, "run_planner_agent", failing_planner)
     monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: kw)
 
-    result = await orchestrator.handle_turn(client=object(), amadeus=object(), session=session, user_message="add museums")
+    result = await orchestrator.handle_turn(client=object(), session=session, user_message="add museums")
 
     assert "Updated your trip" not in result.reply
     assert "couldn't update your trip details" in result.reply

@@ -1,33 +1,19 @@
 from travel_agent.agents.base import AgentUsage, run_agent_loop
 from travel_agent.schemas import HotelCandidate, TripBrief
-from travel_agent.tools.amadeus_client import AmadeusClient
 
 HOTEL_SYSTEM_PROMPT = """You are the Hotel agent for a travel planning system.
-Given a trip brief, call search_hotels with the 3-letter IATA city code for
-the destination and the trip's check-in/check-out dates, then call
-submit_hotel_candidates with up to 3 options ranked by best value within
-the stated budget when possible.
-Only submit candidates that appeared verbatim in a search_hotels tool
-result: never recall, estimate, or invent a hotel or a price from your own
-knowledge.
+Given a trip brief, use web_search to find current hotel prices and options
+in the destination city for the given check-in/check-out dates (e.g. search
+Booking.com, Google Hotels, or hotel sites). Then call submit_hotel_candidates
+with up to 3 options ranked by best value within the stated budget when
+possible.
+Only submit candidates backed by an actual web_search result for a current
+price: never recall, estimate, or invent a hotel or a price from your own
+knowledge. If web search doesn't turn up a clear, current price, return
+fewer candidates rather than a fabricated one.
 """
 
-# Fields used to match a submitted candidate against a real search result.
-_MATCH_FIELDS = ("name", "price_usd_per_night")
-
-SEARCH_HOTELS_TOOL = {
-    "name": "search_hotels",
-    "description": "Search real hotel offers via Amadeus.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "city_code": {"type": "string", "description": "3-letter IATA city code"},
-            "check_in": {"type": "string", "description": "ISO date"},
-            "check_out": {"type": "string", "description": "ISO date"},
-        },
-        "required": ["city_code", "check_in", "check_out"],
-    },
-}
+WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 4}
 
 _CANDIDATE_SCHEMA = {
     "type": "object",
@@ -51,26 +37,15 @@ SUBMIT_HOTEL_CANDIDATES_TOOL = {
 }
 
 
-def _match_key(offer: dict) -> tuple:
-    return tuple(offer.get(field) for field in _MATCH_FIELDS)
+async def _no_op_executor(name: str, tool_input: dict) -> dict:
+    raise AssertionError(f"hotel agent has no local client tools, got {name!r}")
 
 
-async def run_hotel_agent(client, brief: TripBrief, amadeus: AmadeusClient) -> tuple[list[HotelCandidate], AgentUsage]:
-    real_offers: list[dict] = []
-
-    async def executor(name: str, tool_input: dict) -> dict:
-        offers = await amadeus.search_hotels(
-            city_code=tool_input["city_code"],
-            check_in=tool_input["check_in"],
-            check_out=tool_input["check_out"],
-        )
-        real_offers.extend(offers)
-        return {"offers": offers}
-
+async def run_hotel_agent(client, brief: TripBrief) -> tuple[list[HotelCandidate], AgentUsage]:
     user_message = (
         f"Trip brief: destination={brief.destination}, check_in={brief.start_date}, "
         f"check_out={brief.end_date}, budget_usd={brief.budget_usd}. "
-        "Search for hotels and submit up to 3 ranked candidates."
+        "Search the web for current hotel prices and submit up to 3 ranked candidates."
     )
 
     result = await run_agent_loop(
@@ -78,14 +53,12 @@ async def run_hotel_agent(client, brief: TripBrief, amadeus: AmadeusClient) -> t
         model="claude-sonnet-5",
         system_prompt=HOTEL_SYSTEM_PROMPT,
         user_message=user_message,
-        tools=[SEARCH_HOTELS_TOOL, SUBMIT_HOTEL_CANDIDATES_TOOL],
+        tools=[WEB_SEARCH_TOOL, SUBMIT_HOTEL_CANDIDATES_TOOL],
         final_tool_name="submit_hotel_candidates",
-        tool_executor=executor,
-        client_tool_names={"search_hotels"},
-        max_turns=3,
+        tool_executor=_no_op_executor,
+        client_tool_names=set(),
+        max_turns=4,
     )
 
-    # Drop any candidate the model invented rather than took from a real offer.
-    real_keys = {_match_key(o) for o in real_offers}
-    candidates = [HotelCandidate(**c) for c in result.output["candidates"] if _match_key(c) in real_keys]
+    candidates = [HotelCandidate(**c) for c in result.output["candidates"]]
     return candidates, result.usage

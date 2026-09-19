@@ -35,7 +35,7 @@ async def test_post_message_returns_turn_result(api_client, monkeypatch):
         warnings=["couldn't fetch live flight data right now"],
     )
 
-    async def fake_handle_turn(client, amadeus, session, user_message):
+    async def fake_handle_turn(client, session, user_message):
         assert user_message == "Plan a trip to Paris"
         return fake_result
 
