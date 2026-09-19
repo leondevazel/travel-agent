@@ -1,10 +1,58 @@
 "use client";
 
-import { Airplane, Bed, PaperPlaneRight, Warning } from "@phosphor-icons/react";
+import { Airplane, ArrowUpRight, Bed, PaperPlaneRight, Warning } from "@phosphor-icons/react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import type { FlightCandidate, HotelCandidate, ItineraryDay, TripBrief } from "@/lib/api";
 import { TripJourney } from "./TripJourney";
+
+function BookingRow({
+  index,
+  href,
+  title,
+  subtitle,
+  price,
+}: {
+  index: number;
+  href: string | null;
+  title: string;
+  subtitle: string;
+  price: string;
+}) {
+  const clickable = Boolean(href);
+  return (
+    <motion.a
+      href={href ?? undefined}
+      target={clickable ? "_blank" : undefined}
+      rel={clickable ? "noopener noreferrer" : undefined}
+      initial={{ opacity: 0, x: -16 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.07, type: "spring", stiffness: 240, damping: 22 }}
+      whileHover={clickable ? { x: 6, scale: 1.01 } : undefined}
+      whileTap={clickable ? { scale: 0.99 } : undefined}
+      className={`group relative flex items-center justify-between gap-3 overflow-hidden px-4 py-3 text-sm ${
+        clickable ? "cursor-pointer" : "cursor-default"
+      }`}
+    >
+      {/* Accent wipes in from the left on hover. */}
+      <span className="absolute inset-y-0 left-0 w-full origin-left scale-x-0 bg-accent/8 transition-transform duration-300 group-hover:scale-x-100" />
+      <span className="relative z-10 flex min-w-0 flex-col">
+        <span className="truncate font-medium text-foreground">{title}</span>
+        {subtitle && <span className="truncate text-xs text-foreground/50">{subtitle}</span>}
+      </span>
+      <span className="relative z-10 flex shrink-0 items-center gap-1.5">
+        <span className="font-semibold text-foreground">{price}</span>
+        {clickable && (
+          <ArrowUpRight
+            size={15}
+            weight="bold"
+            className="text-accent opacity-0 transition-all duration-200 group-hover:translate-x-0.5 group-hover:opacity-100"
+          />
+        )}
+      </span>
+    </motion.a>
+  );
+}
 
 export function TripResults({
   brief,
@@ -73,19 +121,16 @@ export function TripResults({
           </h2>
           <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-surface">
             {flights.map((f, i) => (
-              <motion.div
+              <BookingRow
                 key={i}
-                initial={{ opacity: 0, x: -12 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.06, type: "spring", stiffness: 240, damping: 24 }}
-                whileHover={{ x: 4, backgroundColor: "color-mix(in srgb, var(--accent) 6%, transparent)" }}
-                className="flex items-center justify-between px-4 py-3 text-sm"
-              >
-                <span className="text-foreground">
-                  {f.carrier} · {f.origin} to {f.destination}
-                </span>
-                <span className="font-medium text-foreground">${f.price_usd}</span>
-              </motion.div>
+                index={i}
+                href={f.booking_url}
+                title={`${f.carrier} · ${f.origin} to ${f.destination}`}
+                subtitle={[f.departure_time, f.stops === 0 ? "direct" : f.stops ? `${f.stops} stop` : null]
+                  .filter(Boolean)
+                  .join(" · ")}
+                price={`$${f.price_usd}`}
+              />
             ))}
           </div>
         </section>
@@ -98,19 +143,14 @@ export function TripResults({
           </h2>
           <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-surface">
             {hotels.map((h, i) => (
-              <motion.div
+              <BookingRow
                 key={i}
-                initial={{ opacity: 0, x: -12 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.06, type: "spring", stiffness: 240, damping: 24 }}
-                whileHover={{ x: 4, backgroundColor: "color-mix(in srgb, var(--accent) 6%, transparent)" }}
-                className="flex items-center justify-between px-4 py-3 text-sm"
-              >
-                <span className="text-foreground">
-                  {h.name} · {h.address}
-                </span>
-                <span className="font-medium text-foreground">${h.price_usd_per_night}/night</span>
-              </motion.div>
+                index={i}
+                href={h.booking_url}
+                title={h.name}
+                subtitle={[h.address, h.rating ? `★ ${h.rating}` : null].filter(Boolean).join(" · ")}
+                price={`$${h.price_usd_per_night}/night`}
+              />
             ))}
           </div>
         </section>

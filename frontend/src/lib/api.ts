@@ -15,11 +15,12 @@ export type TripBrief = {
 export type FlightCandidate = {
   carrier: string;
   price_usd: number;
-  departure_time: string;
-  arrival_time: string;
   origin: string;
   destination: string;
-  stops: number;
+  departure_time: string | null;
+  arrival_time: string | null;
+  stops: number | null;
+  booking_url: string | null;
 };
 
 export type HotelCandidate = {
@@ -27,12 +28,13 @@ export type HotelCandidate = {
   price_usd_per_night: number;
   rating: number | null;
   address: string;
+  booking_url: string | null;
 };
 
 export type ItineraryDay = {
   day_number: number;
   date: string;
-  location: string;
+  locations: string[];
   activities: string[];
   notes: string;
 };
