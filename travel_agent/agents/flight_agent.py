@@ -61,6 +61,7 @@ async def run_flight_agent(client, brief: TripBrief) -> tuple[list[FlightCandida
         tool_executor=_no_op_executor,
         client_tool_names=set(),
         max_turns=4,
+        max_tokens=3072,
     )
 
     candidates = [FlightCandidate(**c) for c in result.output["candidates"]]

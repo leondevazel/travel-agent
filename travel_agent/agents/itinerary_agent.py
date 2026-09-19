@@ -85,6 +85,7 @@ async def run_itinerary_agent(
         tool_executor=_no_op_executor,
         client_tool_names=set(),
         max_turns=6,
+        max_tokens=4096,
     )
 
     days = [ItineraryDay(**d) for d in result.output["days"]]

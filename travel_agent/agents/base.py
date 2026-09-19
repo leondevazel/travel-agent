@@ -40,6 +40,7 @@ async def run_agent_loop(
     client_tool_names: set[str],
     tool_choice: dict | None = None,
     max_turns: int = 5,
+    max_tokens: int = 2048,
 ) -> AgentResult:
     start = time.monotonic()
     messages: list[dict] = [{"role": "user", "content": user_message}]
@@ -49,7 +50,7 @@ async def run_agent_loop(
     for _ in range(max_turns):
         create_kwargs = dict(
             model=model,
-            max_tokens=2048,
+            max_tokens=max_tokens,
             system=system_prompt,
             messages=messages,
             tools=tools,
