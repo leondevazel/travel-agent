@@ -1,9 +1,9 @@
 "use client";
 
 import { Airplane, Bed, PaperPlaneRight, Warning } from "@phosphor-icons/react";
-import { motion } from "motion/react";
 import { useState } from "react";
 import type { FlightCandidate, HotelCandidate, ItineraryDay, TripBrief } from "@/lib/api";
+import { TripJourney } from "./TripJourney";
 
 export function TripResults({
   brief,
@@ -61,26 +61,7 @@ export function TripResults({
       {itinerary.length > 0 && (
         <section className="flex flex-col gap-3">
           <h2 className="text-sm font-medium text-foreground/60">Itinerary</h2>
-          {itinerary.map((day, i) => (
-            <motion.div
-              key={day.day_number}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="rounded-lg border border-border bg-surface p-4"
-            >
-              <div className="flex items-baseline justify-between">
-                <span className="font-medium text-foreground">Day {day.day_number}</span>
-                <span className="text-xs text-foreground/50">{day.date}</span>
-              </div>
-              <ul className="mt-2 flex flex-col gap-1 text-sm text-foreground/80">
-                {day.activities.map((activity, j) => (
-                  <li key={j}>{activity}</li>
-                ))}
-              </ul>
-              {day.notes && <p className="mt-2 text-xs text-foreground/50">{day.notes}</p>}
-            </motion.div>
-          ))}
+          <TripJourney days={itinerary} />
         </section>
       )}
 

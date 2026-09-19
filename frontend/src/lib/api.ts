@@ -32,6 +32,7 @@ export type HotelCandidate = {
 export type ItineraryDay = {
   day_number: number;
   date: string;
+  location: string;
   activities: string[];
   notes: string;
 };
