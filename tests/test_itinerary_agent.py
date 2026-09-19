@@ -66,7 +66,7 @@ async def test_itinerary_agent_composes_days_from_context_in_one_turn():
                 name="submit_itinerary",
                 input={
                     "days": [
-                        {"day_number": 1, "date": "2026-11-01", "activities": ["Louvre"], "notes": "relaxed pace"},
+                        {"day_number": 1, "date": "2026-11-01", "location": "Louvre", "activities": ["Louvre"], "notes": "relaxed pace"},
                     ]
                 },
             ),
@@ -84,7 +84,7 @@ async def test_itinerary_agent_composes_days_from_context_in_one_turn():
         weather=[{"date": "2026-11-01", "temp_max_c": 14.0, "temp_min_c": 7.0, "condition": "overcast"}],
     )
 
-    assert days == [ItineraryDay(day_number=1, date="2026-11-01", activities=["Louvre"], notes="relaxed pace")]
+    assert days == [ItineraryDay(day_number=1, date="2026-11-01", location="Louvre", activities=["Louvre"], notes="relaxed pace")]
     assert usage.input_tokens == 300
     sent_message = client.messages.calls[0]["messages"][0]["content"]
     assert "overcast" in sent_message

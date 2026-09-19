@@ -20,6 +20,12 @@ appears in some day's activities — these are non-negotiable, unlike
 interests, which are just a general steer on what kind of activities to
 pick.
 
+For each day, also pick one `location`: the single place that best
+represents that day (e.g. "Gyeongbokgung Palace", not "downtown Seoul" or
+just "Seoul"). It's used to look up a real photo for that day, so it must
+be a specific, real, named place, not a generic area or the whole day
+paraphrased.
+
 When finished, call submit_itinerary with one entry per day of the trip.
 """
 
@@ -36,10 +42,14 @@ SUBMIT_ITINERARY_TOOL = {
                     "properties": {
                         "day_number": {"type": "integer"},
                         "date": {"type": "string"},
+                        "location": {
+                            "type": "string",
+                            "description": "The single specific, named place that best represents this day",
+                        },
                         "activities": {"type": "array", "items": {"type": "string"}},
                         "notes": {"type": "string"},
                     },
-                    "required": ["day_number", "date", "activities", "notes"],
+                    "required": ["day_number", "date", "location", "activities", "notes"],
                 },
             },
         },

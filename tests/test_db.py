@@ -25,7 +25,7 @@ def test_save_and_reload_full_session(db_ready):
     brief = TripBrief(destination="Paris", origin="ICN", budget_usd=2000.0, interests=["art"], pace="balanced")
     flights = [FlightCandidate(carrier="KE", price_usd=800.0, departure_time="t1", arrival_time="t2", origin="ICN", destination="CDG", stops=0)]
     hotels = [HotelCandidate(name="Hotel Lumiere", price_usd_per_night=150.0, rating=4.2, address="Paris")]
-    itinerary = [ItineraryDay(day_number=1, date=datetime.date(2026, 11, 1), activities=["Louvre"], notes="")]
+    itinerary = [ItineraryDay(day_number=1, date=datetime.date(2026, 11, 1), location="Louvre", activities=["Louvre"], notes="")]
 
     save_session(
         "sess-2",
