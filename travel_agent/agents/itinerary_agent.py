@@ -10,7 +10,7 @@ destination. Respect the requested pace ("relaxed" = 1-2 activities/day,
 with one entry per day of the trip.
 """
 
-WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 5}
+WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 3}
 
 SUBMIT_ITINERARY_TOOL = {
     "name": "submit_itinerary",
@@ -84,7 +84,7 @@ async def run_itinerary_agent(
         final_tool_name="submit_itinerary",
         tool_executor=_no_op_executor,
         client_tool_names=set(),
-        max_turns=4,
+        max_turns=6,
     )
 
     days = [ItineraryDay(**d) for d in result.output["days"]]

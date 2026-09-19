@@ -17,7 +17,7 @@ from travel_agent.diff import diff_trip_brief
 from travel_agent.schemas import FlightCandidate, HotelCandidate, ItineraryDay, Message, TripBrief
 from travel_agent.tools.weather_client import WeatherAPIError, get_daily_summary
 
-AGENT_TIMEOUT_SECONDS = 30
+AGENT_TIMEOUT_SECONDS = 60
 
 # Everything an agent can plausibly fail with for reasons outside our control:
 # upstream APIs (Open-Meteo/Anthropic, including its web_search tool), a

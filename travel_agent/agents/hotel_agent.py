@@ -13,7 +13,7 @@ knowledge. If web search doesn't turn up a clear, current price, return
 fewer candidates rather than a fabricated one.
 """
 
-WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 4}
+WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 2}
 
 _CANDIDATE_SCHEMA = {
     "type": "object",
@@ -50,7 +50,7 @@ async def run_hotel_agent(client, brief: TripBrief) -> tuple[list[HotelCandidate
 
     result = await run_agent_loop(
         client=client,
-        model="claude-sonnet-5",
+        model="claude-haiku-4-5-20251001",
         system_prompt=HOTEL_SYSTEM_PROMPT,
         user_message=user_message,
         tools=[WEB_SEARCH_TOOL, SUBMIT_HOTEL_CANDIDATES_TOOL],
