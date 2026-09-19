@@ -171,6 +171,64 @@ async def test_agent_timeout_falls_back_without_failing_whole_turn(monkeypatch):
     assert any("flight" in w for w in result.warnings)
 
 
+async def test_planner_failure_falls_back_to_previous_brief_and_warns(monkeypatch):
+    previous_brief = TripBrief(destination="Paris", origin="ICN", start_date="2026-11-01", end_date="2026-11-02", budget_usd=2000.0, interests=["art"], pace="balanced")
+    cached_flights = [FlightCandidate(carrier="KE", price_usd=800, departure_time="t1", arrival_time="t2", origin="ICN", destination="CDG", stops=0)]
+    cached_hotels = [HotelCandidate(name="H", price_usd_per_night=100, rating=4.0, address="Paris")]
+    cached_itinerary = [ItineraryDay(day_number=1, date="2026-11-01", activities=["Louvre"], notes="")]
+
+    session = TripSessionState(
+        id="s1", messages=[], trip_brief=previous_brief,
+        flight_candidates=cached_flights, hotel_candidates=cached_hotels, itinerary=cached_itinerary,
+    )
+
+    async def failing_planner(client, messages, previous_brief_):
+        raise AgentError("planner never produced a final tool call")
+
+    async def fail_if_called(*args, **kwargs):
+        raise AssertionError("specialist agents must not run when planner fails")
+
+    monkeypatch.setattr(orchestrator, "run_planner_agent", failing_planner)
+    monkeypatch.setattr(orchestrator, "run_flight_agent", fail_if_called)
+    monkeypatch.setattr(orchestrator, "run_hotel_agent", fail_if_called)
+    monkeypatch.setattr(orchestrator, "run_itinerary_agent", fail_if_called)
+    recorded = []
+    monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: recorded.append(kw))
+
+    result = await orchestrator.handle_turn(client=object(), amadeus=object(), session=session, user_message="add more museums")
+
+    assert result.trip_brief == previous_brief
+    assert result.flight_candidates == cached_flights
+    assert result.hotel_candidates == cached_hotels
+    assert result.itinerary == cached_itinerary
+    assert any("trip details" in w for w in result.warnings)
+    planner_calls = [kw for kw in recorded if kw["agent_name"] == "planner"]
+    assert len(planner_calls) == 1
+    assert planner_calls[0]["success"] is False
+
+
+async def test_planner_failure_on_new_session_falls_back_to_empty_brief(monkeypatch):
+    async def failing_planner(client, messages, previous_brief_):
+        raise AgentError("planner never produced a final tool call")
+
+    async def fail_if_called(*args, **kwargs):
+        raise AssertionError("specialist agents must not run when planner fails on first turn")
+
+    monkeypatch.setattr(orchestrator, "run_planner_agent", failing_planner)
+    monkeypatch.setattr(orchestrator, "run_flight_agent", fail_if_called)
+    monkeypatch.setattr(orchestrator, "run_hotel_agent", fail_if_called)
+    monkeypatch.setattr(orchestrator, "run_itinerary_agent", fail_if_called)
+    monkeypatch.setattr(orchestrator.metrics, "record_agent_call", lambda **kw: kw)
+
+    result = await orchestrator.handle_turn(client=object(), amadeus=object(), session=_empty_session(), user_message="Plan a trip to Tokyo")
+
+    assert result.trip_brief == TripBrief()
+    assert result.flight_candidates == []
+    assert result.hotel_candidates == []
+    assert result.itinerary == []
+    assert any("trip details" in w for w in result.warnings)
+
+
 async def test_unrelated_message_does_not_rerun_specialists(monkeypatch):
     previous_brief = TripBrief(destination="Paris", origin="ICN", start_date="2026-11-01", end_date="2026-11-02", budget_usd=2000.0, interests=["art"], pace="balanced")
     session = TripSessionState(

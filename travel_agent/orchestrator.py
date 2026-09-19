@@ -55,18 +55,32 @@ async def _run_with_fallback(agent_name: str, coro, cached):
 
 async def handle_turn(client, amadeus, session: TripSessionState, user_message: str) -> TurnResult:
     messages = session.messages + [Message(role="user", content=user_message)]
-
-    new_brief, planner_usage = await run_planner_agent(client, messages, session.trip_brief)
-    metrics.record_agent_call(
-        agent_name="planner",
-        latency_ms=planner_usage.latency_ms,
-        input_tokens=planner_usage.input_tokens,
-        output_tokens=planner_usage.output_tokens,
-        success=True,
-    )
-
-    agents_to_run = diff_trip_brief(session.trip_brief, new_brief)
     warnings: list[str] = []
+
+    planner_start = time.monotonic()
+    try:
+        new_brief, planner_usage = await asyncio.wait_for(
+            run_planner_agent(client, messages, session.trip_brief), timeout=AGENT_TIMEOUT_SECONDS
+        )
+        metrics.record_agent_call(
+            agent_name="planner",
+            latency_ms=planner_usage.latency_ms,
+            input_tokens=planner_usage.input_tokens,
+            output_tokens=planner_usage.output_tokens,
+            success=True,
+        )
+        agents_to_run = diff_trip_brief(session.trip_brief, new_brief)
+    except _FALLIBLE_ERRORS:
+        latency_ms = (time.monotonic() - planner_start) * 1000
+        metrics.record_agent_call(
+            agent_name="planner", latency_ms=latency_ms, input_tokens=0, output_tokens=0, success=False
+        )
+        # No new brief data to act on, so skip specialist agents entirely rather than
+        # feeding them an empty/unchanged brief that would likely just fail again.
+        new_brief = session.trip_brief if session.trip_brief is not None else TripBrief()
+        agents_to_run = set()
+        warnings.append("couldn't update your trip details right now")
+
     flight_candidates = session.flight_candidates
     hotel_candidates = session.hotel_candidates
     itinerary = session.itinerary
