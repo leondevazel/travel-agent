@@ -100,30 +100,65 @@ search cut planning time from X to Y seconds" — with a real measured
 number, not an estimate, consistent with the "never estimate, always
 measure" rule carried over from the prior project.
 
-## 7. Explicitly Out of Scope (for now)
+## 7. Landing Page / Interactive Frontend (deferred until backend works)
 
-- Real booking/payment execution (safety + complexity; the itinerary
-  is the deliverable, not a completed purchase).
-- The landing page's 3D/animation treatment — user wants a genuinely
-  cute, travel-themed (planes, landscapes, characters) 3D-feeling
-  landing page. Discussed but deliberately deferred until the backend
-  is working:
-  - Bespoke custom 3D character modeling is out of reach (no 3D
-    modeling/rigging tool or text-to-3D generator available) — noted
-    explicitly to the user, not glossed over.
-  - Realistic path discussed: Three.js (hand-coded low-poly 3D scenes)
-    + free CC0 3D assets (e.g. Kenney.nl, Sketchfab CC0) + possibly
-    Lottie animations for 2.5D illustrated moments. No final decision
-    made yet — revisit once backend works.
+User wants a genuinely "wow", professional-grade interactive landing
+page — not just static visual polish. Concrete moments called out:
+
+- **Traveler count picker**: selecting party size adds/removes
+  character illustrations one at a time with a bounce/fade animation
+  (not an instant swap).
+- **Country picker**: selecting a destination shows that country's
+  representative landmark/scenery (e.g. Eiffel Tower for France, Fuji
+  + torii for Japan) in a small 3D scene.
+- **Trip-generation transition**: while the agents are working, show
+  a "~로 떠나는 중..." moment — the user's character boards a plane/boat
+  and travels, to amplify anticipation rather than a plain loading
+  spinner.
+
+Claude's own artifact/frontend-design tooling can build and integrate
+the interaction logic and code, but cannot originate polished
+character illustration or 3D asset design/rigging itself (no
+image/3D-generation tool available). Decision: **outsource asset and
+animation creation to specialized no-code tools, integrate their
+exported output in code.**
+
+- **Rive** (rive.app) — character animations driven by state machines;
+  fits the traveler-count add/remove animation and the plane/boat
+  trip-transition moment. Exports a `.riv` file, embedded via the
+  `@rive-app/react-canvas` web runtime.
+- **Spline** (spline.design) — no-code 3D scene editor with
+  text-to-3D/material generation and an easy React embed
+  (`@splinetool/react-spline`); fits the per-country landmark/scenery
+  scene on selection.
+- **LottieFiles** (lottiefiles.com) — fallback for short, lightweight
+  looping transition animations if Rive proves heavier than needed for
+  a given moment.
+
+Draft prompts already written for Rive (traveler character set +
+count state machine) and Spline (per-country low-poly landmark scene)
+— see the session that produced this spec update; reuse and refine
+them when this phase starts. Division of labor: assets/animations are
+authored in Rive/Spline by the user (or a designer), Claude integrates
+the exported files into the React/Next.js frontend and wires them to
+app state (party size, selected country, generation-in-progress).
+
+- Real booking/payment execution stays out of scope entirely (safety +
+  complexity; the itinerary is the deliverable, not a completed
+  purchase).
 
 ## 8. Next Steps
 
-1. User review of this spec (this file).
-2. Invoke the writing-plans skill to produce an implementation plan
-   (TDD-based, per superpowers workflow) for the backend
-   (Planner/Flight/Hotel/Itinerary agents + orchestrator + TripSession
-   persistence) — landing page/animation work comes after the backend
-   works end-to-end.
+1. ~~User review of this spec (this file).~~ Done — spec approved,
+   frontend direction (§7) added after user follow-up.
+2. Backend implementation plan written via the writing-plans skill:
+   `docs/superpowers/plans/2026-09-19-travel-agent-backend-plan.md`
+   (TDD-based, 11 tasks: scaffolding+schemas+diff, TripSession
+   persistence, Amadeus client, weather client, shared agent tool-use
+   loop, Planner/Flight/Hotel/Itinerary agents, metrics, orchestrator,
+   FastAPI app). Currently executing this plan.
+3. Landing page/animation work (§7) starts once the backend plan is
+   fully green end-to-end.
 
 ## Resuming this project in a new session
 
