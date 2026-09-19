@@ -35,4 +35,41 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+  /* Korean has no inter-word break opportunities the default algorithm
+     respects, so it happily splits mid-word. keep-all breaks on spaces only. */
+  word-break: keep-all;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes blob-a {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(6vw, 8vh) scale(1.15); }
+    66% { transform: translate(-4vw, 4vh) scale(0.9); }
+  }
+  @keyframes blob-b {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(-8vw, -6vh) scale(1.2); }
+  }
+  @keyframes blob-c {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    40% { transform: translate(5vw, -8vh) scale(1.1); }
+    70% { transform: translate(-6vw, -2vh) scale(0.95); }
+  }
+  @keyframes drift-cloud {
+    from { transform: translateX(640px); }
+    to { transform: translateX(-120px); }
+  }
+  @keyframes wobble {
+    0%, 88%, 100% { transform: rotate(0deg); }
+    91% { transform: rotate(-10deg); }
+    94% { transform: rotate(10deg); }
+    97% { transform: rotate(-5deg); }
+  }
+  .animate-blob-a { animation: blob-a 22s ease-in-out infinite; }
+  .animate-blob-b { animation: blob-b 26s ease-in-out infinite; }
+  .animate-blob-c { animation: blob-c 30s ease-in-out infinite; }
+  /* Idle wobble that fires every few seconds, so the compass feels alive
+     without animating constantly. Delayed so it never fights the spring
+     entrance animation. */
+  .animate-wobble { animation: wobble 5s ease-in-out 1.5s infinite; }
 }

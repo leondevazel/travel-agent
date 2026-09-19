@@ -1,6 +1,7 @@
 "use client";
 
 import { Airplane, Bed, PaperPlaneRight, Warning } from "@phosphor-icons/react";
+import { motion } from "motion/react";
 import { useState } from "react";
 import type { FlightCandidate, HotelCandidate, ItineraryDay, TripBrief } from "@/lib/api";
 import { TripJourney } from "./TripJourney";
@@ -72,12 +73,19 @@ export function TripResults({
           </h2>
           <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-surface">
             {flights.map((f, i) => (
-              <div key={i} className="flex items-center justify-between px-4 py-3 text-sm">
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.06, type: "spring", stiffness: 240, damping: 24 }}
+                whileHover={{ x: 4, backgroundColor: "color-mix(in srgb, var(--accent) 6%, transparent)" }}
+                className="flex items-center justify-between px-4 py-3 text-sm"
+              >
                 <span className="text-foreground">
                   {f.carrier} · {f.origin} to {f.destination}
                 </span>
                 <span className="font-medium text-foreground">${f.price_usd}</span>
-              </div>
+              </motion.div>
             ))}
           </div>
         </section>
@@ -90,12 +98,19 @@ export function TripResults({
           </h2>
           <div className="flex flex-col divide-y divide-border rounded-lg border border-border bg-surface">
             {hotels.map((h, i) => (
-              <div key={i} className="flex items-center justify-between px-4 py-3 text-sm">
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.06, type: "spring", stiffness: 240, damping: 24 }}
+                whileHover={{ x: 4, backgroundColor: "color-mix(in srgb, var(--accent) 6%, transparent)" }}
+                className="flex items-center justify-between px-4 py-3 text-sm"
+              >
                 <span className="text-foreground">
                   {h.name} · {h.address}
                 </span>
                 <span className="font-medium text-foreground">${h.price_usd_per_night}/night</span>
-              </div>
+              </motion.div>
             ))}
           </div>
         </section>

@@ -1,8 +1,14 @@
 "use client";
 
+import { motion } from "motion/react";
 import { useState } from "react";
 import { TagListInput } from "./TagListInput";
 import { TravelerCountPicker } from "./TravelerCountPicker";
+
+const FIELD = {
+  hidden: { opacity: 0, y: 18 },
+  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 220, damping: 24 } },
+} as const;
 
 export type TripFormValues = {
   travelers: number;
@@ -63,13 +69,19 @@ export function TripForm({ onSubmit }: { onSubmit: (message: string) => void }) 
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full max-w-lg flex-col gap-6">
-      <div className="flex flex-col gap-2">
+    <motion.form
+      onSubmit={handleSubmit}
+      initial="hidden"
+      animate="show"
+      variants={{ hidden: {}, show: { transition: { staggerChildren: 0.07 } } }}
+      className="flex w-full max-w-lg flex-col gap-6"
+    >
+      <motion.div variants={FIELD} className="flex flex-col gap-2">
         <span className="text-sm font-medium text-foreground">Travelers</span>
         <TravelerCountPicker count={travelers} onChange={setTravelers} />
-      </div>
+      </motion.div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <motion.div variants={FIELD} className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-2">
           <label htmlFor="origin" className="text-sm font-medium text-foreground">
             From
@@ -100,16 +112,18 @@ export function TripForm({ onSubmit }: { onSubmit: (message: string) => void }) 
             ))}
           </select>
         </div>
-      </div>
+      </motion.div>
 
-      <TagListInput
-        label="Destinations (in visit order)"
-        placeholder="Type a city and press Enter"
-        values={destinations}
-        onChange={setDestinations}
-      />
+      <motion.div variants={FIELD}>
+        <TagListInput
+          label="Destinations (in visit order)"
+          placeholder="Type a city and press Enter"
+          values={destinations}
+          onChange={setDestinations}
+        />
+      </motion.div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <motion.div variants={FIELD} className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-2">
           <label htmlFor="start" className="text-sm font-medium text-foreground">
             Departing
@@ -134,9 +148,9 @@ export function TripForm({ onSubmit }: { onSubmit: (message: string) => void }) 
             className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none"
           />
         </div>
-      </div>
+      </motion.div>
 
-      <div className="flex flex-col gap-2">
+      <motion.div variants={FIELD} className="flex flex-col gap-2">
         <label htmlFor="budget" className="text-sm font-medium text-foreground">
           Budget (USD, optional)
         </label>
@@ -149,29 +163,36 @@ export function TripForm({ onSubmit }: { onSubmit: (message: string) => void }) 
           placeholder="2000"
           className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder:text-foreground/40 focus:border-accent focus:outline-none"
         />
-      </div>
+      </motion.div>
 
-      <TagListInput
-        label="Interests (optional)"
-        placeholder="art, food, hiking..."
-        values={interests}
-        onChange={setInterests}
-      />
+      <motion.div variants={FIELD}>
+        <TagListInput
+          label="Interests (optional)"
+          placeholder="art, food, hiking..."
+          values={interests}
+          onChange={setInterests}
+        />
+      </motion.div>
 
-      <TagListInput
-        label="Must-visit places (optional)"
-        placeholder="Eiffel Tower..."
-        values={mustVisit}
-        onChange={setMustVisit}
-      />
+      <motion.div variants={FIELD}>
+        <TagListInput
+          label="Must-visit places (optional)"
+          placeholder="Eiffel Tower..."
+          values={mustVisit}
+          onChange={setMustVisit}
+        />
+      </motion.div>
 
-      <button
+      <motion.button
         type="submit"
         disabled={!canSubmit}
-        className="mt-2 w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground transition active:scale-[0.98] disabled:opacity-40"
+        variants={FIELD}
+        whileHover={canSubmit ? { scale: 1.02, y: -2 } : undefined}
+        whileTap={canSubmit ? { scale: 0.97 } : undefined}
+        className="mt-2 w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground shadow-lg shadow-accent/20 disabled:opacity-40 disabled:shadow-none"
       >
         Plan my trip
-      </button>
-    </form>
+      </motion.button>
+    </motion.form>
   );
 }

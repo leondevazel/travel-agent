@@ -51,27 +51,43 @@ export default function Home() {
     <main className="flex flex-1 flex-col items-center justify-center px-4 py-16">
       {step === "intro" && (
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          initial="hidden"
+          animate="show"
+          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.12, delayChildren: 0.1 } } }}
           className="flex max-w-md flex-col items-center gap-6 text-center"
         >
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/10 text-accent">
-            <Compass size={24} weight="fill" />
-          </span>
-          <h1 className="text-4xl font-semibold tracking-tight text-balance text-foreground">
+          <motion.span
+            variants={{ hidden: { opacity: 0, scale: 0.4, rotate: -20 }, show: { opacity: 1, scale: 1, rotate: 0 } }}
+            transition={{ type: "spring", stiffness: 260, damping: 16 }}
+            className="flex h-14 w-14 animate-wobble items-center justify-center rounded-full bg-accent/10 text-accent"
+          >
+            <Compass size={26} weight="fill" />
+          </motion.span>
+          <motion.h1
+            variants={{ hidden: { opacity: 0, y: 24 }, show: { opacity: 1, y: 0 } }}
+            transition={{ type: "spring", stiffness: 200, damping: 20 }}
+            className="text-4xl font-semibold tracking-tight text-balance text-foreground"
+          >
             실제 데이터로 짜는 여행 계획
-          </h1>
-          <p className="text-base text-foreground/60">
+          </motion.h1>
+          <motion.p
+            variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }}
+            transition={{ type: "spring", stiffness: 200, damping: 22 }}
+            className="text-base text-foreground/60"
+          >
             실시간 항공권, 숙소, 날씨를 검색해서 당신의 일정에 딱 맞는 여행 계획을 만들어드려요.
-          </p>
-          <button
+          </motion.p>
+          <motion.button
             type="button"
             onClick={() => setStep("form")}
-            className="rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-accent-foreground transition active:scale-[0.98]"
+            variants={{ hidden: { opacity: 0, y: 12, scale: 0.9 }, show: { opacity: 1, y: 0, scale: 1 } }}
+            transition={{ type: "spring", stiffness: 260, damping: 18 }}
+            whileHover={{ scale: 1.05, y: -2 }}
+            whileTap={{ scale: 0.94 }}
+            className="rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-accent-foreground shadow-lg shadow-accent/20"
           >
             여행 계획 시작하기
-          </button>
+          </motion.button>
         </motion.div>
       )}
 
