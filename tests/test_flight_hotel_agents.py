@@ -91,6 +91,43 @@ async def test_run_flight_agent_searches_web_then_submits():
     assert "web_search_20250305" in tool_types
 
 
+async def test_flight_candidate_accepts_price_without_schedule_details():
+    # Real failure this guards: requiring departure/arrival/stops made the
+    # agent refuse to submit anything when search gave a carrier and a fare
+    # but no timetable, so the UI showed no flights at all.
+    response = FakeResponse(
+        content=[
+            FakeBlock(type="server_tool_use", name="web_search", input={"query": "Busan to Seoul flight price"}),
+            FakeBlock(type="web_search_tool_result"),
+            FakeBlock(
+                type="tool_use",
+                name="submit_flight_candidates",
+                input={
+                    "candidates": [
+                        {
+                            "carrier": "Air Busan",
+                            "price_usd": 48.0,
+                            "origin": "Busan",
+                            "destination": "Seoul",
+                            "booking_url": "https://www.skyscanner.net/routes/pus/sel",
+                        }
+                    ]
+                },
+            ),
+        ],
+        stop_reason="tool_use",
+        usage=FakeUsage(input_tokens=120, output_tokens=30),
+    )
+    client = FakeClient([response])
+
+    candidates, _ = await run_flight_agent(client, _brief())
+
+    assert len(candidates) == 1
+    assert candidates[0].carrier == "Air Busan"
+    assert candidates[0].departure_time is None
+    assert candidates[0].booking_url == "https://www.skyscanner.net/routes/pus/sel"
+
+
 async def test_run_hotel_agent_searches_web_then_submits():
     response = FakeResponse(
         content=[

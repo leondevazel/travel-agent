@@ -11,6 +11,12 @@ Only submit candidates backed by an actual web_search result for a current
 price: never recall, estimate, or invent a hotel or a price from your own
 knowledge. If web search doesn't turn up a clear, current price for a city,
 return fewer candidates for that city rather than a fabricated one.
+
+Also set booking_url on each candidate: the page a traveler can actually
+book that hotel on (its own site, or the Booking.com / Google Hotels page
+you took the rate from). It must be a real URL you saw in a search result,
+not invented. Never return an empty list just because a rate lacked a
+link -- submit the hotel without booking_url instead.
 """
 
 _CANDIDATE_SCHEMA = {
@@ -20,6 +26,10 @@ _CANDIDATE_SCHEMA = {
         "price_usd_per_night": {"type": "number"},
         "rating": {"type": ["number", "null"]},
         "address": {"type": "string"},
+        "booking_url": {
+            "type": ["string", "null"],
+            "description": "Real URL from a search result where this hotel can be booked",
+        },
     },
     "required": ["name", "price_usd_per_night", "address"],
 }

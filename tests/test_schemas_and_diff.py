@@ -44,7 +44,7 @@ def test_itinerary_day_round_trips():
     d = ItineraryDay(
         day_number=2,
         date=datetime.date(2026, 11, 2),
-        location="Louvre",
+        locations=["Louvre"],
         activities=["Louvre", "Seine river walk"],
         notes="Loose pace, one museum only",
     )
