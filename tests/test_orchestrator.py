@@ -23,7 +23,7 @@ async def test_first_turn_runs_all_agents(monkeypatch):
     new_brief = TripBrief(destination="Paris", origin="ICN", start_date="2026-11-01", end_date="2026-11-02", budget_usd=2000.0, interests=["art"], pace="balanced")
     flights = [FlightCandidate(carrier="KE", price_usd=800, departure_time="t1", arrival_time="t2", origin="ICN", destination="CDG", stops=0)]
     hotels = [HotelCandidate(name="H", price_usd_per_night=100, rating=4.0, address="Paris")]
-    days = [ItineraryDay(day_number=1, date="2026-11-01", activities=["Louvre"], notes="")]
+    days = [ItineraryDay(day_number=1, date="2026-11-01", location="Louvre", activities=["Louvre"], notes="")]
 
     async def fake_planner(client, messages, previous_brief):
         return new_brief, _usage()
@@ -62,7 +62,7 @@ async def test_pace_only_change_skips_flight_and_hotel(monkeypatch):
     new_brief = previous_brief.model_copy(update={"pace": "relaxed"})
     cached_flights = [FlightCandidate(carrier="KE", price_usd=800, departure_time="t1", arrival_time="t2", origin="ICN", destination="CDG", stops=0)]
     cached_hotels = [HotelCandidate(name="H", price_usd_per_night=100, rating=4.0, address="Paris")]
-    new_days = [ItineraryDay(day_number=1, date="2026-11-01", activities=["Louvre, slower pace"], notes="")]
+    new_days = [ItineraryDay(day_number=1, date="2026-11-01", location="Louvre", activities=["Louvre, slower pace"], notes="")]
 
     session = TripSessionState(
         id="s1", messages=[], trip_brief=previous_brief,
@@ -175,7 +175,7 @@ async def test_planner_failure_falls_back_to_previous_brief_and_warns(monkeypatc
     previous_brief = TripBrief(destination="Paris", origin="ICN", start_date="2026-11-01", end_date="2026-11-02", budget_usd=2000.0, interests=["art"], pace="balanced")
     cached_flights = [FlightCandidate(carrier="KE", price_usd=800, departure_time="t1", arrival_time="t2", origin="ICN", destination="CDG", stops=0)]
     cached_hotels = [HotelCandidate(name="H", price_usd_per_night=100, rating=4.0, address="Paris")]
-    cached_itinerary = [ItineraryDay(day_number=1, date="2026-11-01", activities=["Louvre"], notes="")]
+    cached_itinerary = [ItineraryDay(day_number=1, date="2026-11-01", location="Louvre", activities=["Louvre"], notes="")]
 
     session = TripSessionState(
         id="s1", messages=[], trip_brief=previous_brief,
@@ -235,7 +235,7 @@ async def test_unrelated_message_does_not_rerun_specialists(monkeypatch):
         id="s1", messages=[], trip_brief=previous_brief,
         flight_candidates=[FlightCandidate(carrier="KE", price_usd=800, departure_time="t1", arrival_time="t2", origin="ICN", destination="CDG", stops=0)],
         hotel_candidates=[HotelCandidate(name="H", price_usd_per_night=100, rating=4.0, address="Paris")],
-        itinerary=[ItineraryDay(day_number=1, date="2026-11-01", activities=["Louvre"], notes="")],
+        itinerary=[ItineraryDay(day_number=1, date="2026-11-01", location="Louvre", activities=["Louvre"], notes="")],
     )
 
     async def fake_planner(client, messages, previous_brief_):

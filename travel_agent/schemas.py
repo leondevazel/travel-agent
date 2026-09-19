@@ -49,5 +49,9 @@ class HotelCandidate(BaseModel):
 class ItineraryDay(BaseModel):
     day_number: int
     date: datetime.date
+    # The single place that best represents this day (e.g. "Gyeongbokgung
+    # Palace"), specific enough to look up a real photo for -- not a vague
+    # area like "downtown" or the city name alone.
+    location: str
     activities: list[str]
     notes: str = ""

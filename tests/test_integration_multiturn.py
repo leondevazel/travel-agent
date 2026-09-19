@@ -30,8 +30,8 @@ FLIGHTS = [
     )
 ]
 HOTELS = [HotelCandidate(name="Hotel Lumiere", price_usd_per_night=180.0, rating=4.3, address="Paris")]
-BALANCED_DAYS = [ItineraryDay(day_number=1, date="2026-11-01", activities=["Louvre", "Musee d'Orsay"], notes="")]
-RELAXED_DAYS = [ItineraryDay(day_number=1, date="2026-11-01", activities=["Louvre"], notes="relaxed pace")]
+BALANCED_DAYS = [ItineraryDay(day_number=1, date="2026-11-01", location="Louvre", activities=["Louvre", "Musee d'Orsay"], notes="")]
+RELAXED_DAYS = [ItineraryDay(day_number=1, date="2026-11-01", location="Louvre", activities=["Louvre"], notes="relaxed pace")]
 
 
 def _usage():
